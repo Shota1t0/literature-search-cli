@@ -1,0 +1,10 @@
+# Stateless scratch exploration — never persisted
+workspace/_scratch/*
+!workspace/_scratch/.gitkeep
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
