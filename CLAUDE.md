@@ -108,7 +108,7 @@
 | PubMed | 接続済み | `mcp__plugin_pubmed_PubMed__*` | 精密な網羅探索に使用 |
 | Zotero | 接続済み（Scite 連携ツール同梱） | `mcp__zotero__*` | `scite_enrich_item` / `scite_enrich_search` / `scite_check_retractions` が引用評価を兼ねる（DOI/ライブラリ範囲のツールであり独立 Scite MCP ではない） |
 | Semantic Scholar | 未接続 | — | 接続後 scout の開拓探索に使用 |
-| OpenAlex | 未接続（実装未選定） | — | 接続後 cartographer / network が使用 |
+| OpenAlex | 接続済み（MCP ではなく直接 REST API） | `Bash`（`curl` 等で `https://api.openalex.org/` を直接呼ぶ） | 個人開発 MCP パッケージを信頼せず、認証不要の公開 REST API を薄い glue（`Bash`）経由で叩く方式を採用（2026-08-15）。`mailto=` パラメータを付けて polite pool を利用する。cartographer（concept/group_by 俯瞰）・network（著者/共著解決）が使用。**`/mcp` の管理対象外**（MCP サーバーではないため、ここに接続状況を明記して都度参照する） |
 | Obsidian | 未接続 | — | 接続後 synthesizer の二次情報出力先 |
 
-未接続 MCP に依存する subagent は、本文内でその旨を明示し、代替（fallback）動作で機能を保つ設計にする。
+未接続 MCP に依存する subagent は、本文内でその旨を明示し、代替（fallback）動作で機能を保つ設計にする。OpenAlex は MCP 未接続のままだが、直接 REST API 経由で機能的には接続済み — cartographer / network はこの方式を一次手段として使う。

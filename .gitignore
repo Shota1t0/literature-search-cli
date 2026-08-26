@@ -1,4 +1,6 @@
-# Stateless scratch exploration — never persisted
+# Research project contents — local only, not part of the public framework
+workspace/*/
+!workspace/_scratch/
 workspace/_scratch/*
 !workspace/_scratch/.gitkeep
 
@@ -8,3 +10,8 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# Secrets — never commit
+.env
+.env.*
+.openalex-mailto
