@@ -52,7 +52,7 @@
 
 ## query-log.jsonl 規約
 
-- スキーマ：`{"src":"pubmed","q":"FLNA mechanosensing","ran":"2026-08-07"}`
+- スキーマ：`{"src":"pubmed","q":"GENE-A pathway regulation","ran":"2026-08-07"}`
 - 追記専用。**dedup 判定には絶対に使わない**（同じクエリ文字列を再実行してよい。着目点が違えば拾う論文も変わるため）。
 - 読むのは、ユーザーが明示的に「もっと他を」「別の角度で」等と求めた時だけ。scout はそのプロジェクトの過去クエリを提示し、被らない新しい角度を組んで再検索する。生ヒットに混じる既出論文は依然 `seen.jsonl` が弾く。
 - 論文レベルの重複回避は常に `seen.jsonl` の仕事。角度の重複回避と論文の重複回避は別レイヤ。
@@ -79,8 +79,8 @@
 - **既出も含めて全件表示**し、新規を視覚的にマークする（人は忘れるため既出も出す）。
 
   ```
-  🆕 [新規] Chen 2025  TDP-43 drives SREBP2 dysregulation...  (cited 34)
-     [既出] Cook 2023  SPTLC1 gain-of-function...             (cited 89)
+  🆕 [新規] Author 2025  ProteinX drives PathwayY dysregulation...  (cited 34)
+     [既出] Author 2023  ProteinZ gain-of-function...               (cited 89)
   ```
 
 - **末尾に隣接軸を提案**：seen の外側へ広げられる未探索軸を提示する。新規÷総数の比率低下を「この軸の掘り尽くし度」の目安とする。

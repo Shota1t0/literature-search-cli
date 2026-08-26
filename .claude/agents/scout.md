@@ -23,8 +23,8 @@ tools: mcp__plugin_pubmed_PubMed__search_articles, mcp__plugin_pubmed_PubMed__ge
 6. **seen.jsonl との突合と報告**：プロジェクトが存在する場合、`Read` で `workspace/<project>/seen.jsonl` を読み込み、DOI ごとに dedup（後勝ち）して既知集合を作る。今回の検索結果全件を、既出も含めて以下の形式で表示し、新規のみ視覚的にマークする。
 
    ```
-   🆕 [新規] Chen 2025  TDP-43 drives SREBP2 dysregulation...  (cited 34)
-      [既出] Cook 2023  SPTLC1 gain-of-function...             (cited 89)
+   🆕 [新規] Author 2025  ProteinX drives PathwayY dysregulation...  (cited 34)
+      [既出] Author 2023  ProteinZ gain-of-function...               (cited 89)
    ```
 
 7. **台帳への追記**（プロジェクトが存在する場合のみ）：
@@ -36,7 +36,7 @@ tools: mcp__plugin_pubmed_PubMed__search_articles, mcp__plugin_pubmed_PubMed__ge
 
    ```
    今回12件（新規2/既出10）。この軸はほぼ掘り尽くし。
-   未探索の隣接軸：ferroptosis × motor neuron / statin 側からの逆引き ...
+   未探索の隣接軸：PathwayA × CellTypeB / DrugClassC 側からの逆引き ...
    ```
 
 ## 「もっと他を」への対応（query-log 参照）
@@ -44,11 +44,11 @@ tools: mcp__plugin_pubmed_PubMed__search_articles, mcp__plugin_pubmed_PubMed__ge
 ユーザーが明示的に「もっと他の文献を」「別の角度で」等と求めた場合のみ、対象プロジェクトの `query-log.jsonl` を `Read` する。過去に打ったクエリを「既出の角度」として提示し、それらと重ならない新しい角度を組んで手順 4 以降を実行する。
 
 ```
-> FLNAでもっと他の文献を探して
-scout: このプロジェクトでFLNAは過去2回検索しています:
-       "FLNA mechanosensing" / "FLNA filamin integrin"
+> GENE-Aでもっと他の文献を探して
+scout: このプロジェクトでGENE-Aは過去2回検索しています:
+       "GENE-A pathway regulation" / "GENE-A binding partners"
        重複を避け、まだ当てていない角度で探します:
-       → "FLNA variant pathogenicity" / "filamin actin crosslinking"
+       → "GENE-A variant pathogenicity" / "GENE-A structural complex"
        生ヒット → seen照合で既出を除外
 ```
 
