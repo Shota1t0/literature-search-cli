@@ -46,7 +46,7 @@
 ## ID 正規化ルール
 
 - どのソースから取得した論文も、**まず DOI に正規化**してから `seen.jsonl` と照合する。
-- PubMed 由来：`mcp__plugin_pubmed_PubMed__convert_article_ids` や `get_article_metadata` で DOI を取得。
+- PubMed 由来：`mcp__pubmed__convert_article_ids` や `get_article_metadata` で DOI を取得。
 - DOI が取得できない場合はタイトル+出版年で近似照合し、結果に明示的にフラグを立てる。
 - これにより、PubMed で見た論文を将来 OpenAlex 等で再発見しても既出と判定できる（ソース横断の重複回避）。
 
@@ -117,7 +117,7 @@
 
 | ソース | 状態 | ツールプレフィックス | 備考 |
 |---|---|---|---|
-| PubMed | 接続済み | `mcp__plugin_pubmed_PubMed__*` | 精密な網羅探索に使用 |
+| PubMed | 接続済み（ユーザースコープに直接登録） | `mcp__pubmed__*` | 精密な網羅探索に使用。`claude mcp add --transport http --scope user pubmed https://pubmed.mcp.claude.com/mcp` で登録（2026-10-26）。以前は `pubmed@life-sciences` プラグイン経由（`mcp__plugin_pubmed_PubMed__*`）だったが、配布元マーケットプレイスから削除され読み込まれなくなったため切り替えた。同じ URL の PubMed は `bio-research` プラグインにもあるが、直接登録した方が残る |
 | Zotero | 接続済み（Scite 連携ツール同梱） | `mcp__zotero__*` | `scite_enrich_item` / `scite_enrich_search` / `scite_check_retractions` が引用評価を兼ねる（DOI/ライブラリ範囲のツールであり独立 Scite MCP ではない） |
 | Semantic Scholar | 未接続 | — | 接続後 scout の開拓探索に使用 |
 | OpenAlex | 接続済み（MCP ではなく直接 REST API） | `Bash`（`curl` 等で `https://api.openalex.org/` を直接呼ぶ） | 個人開発 MCP パッケージを信頼せず、認証不要の公開 REST API を薄い glue（`Bash`）経由で叩く方式を採用（2026-08-15）。`mailto=` パラメータを付けて polite pool を利用する。cartographer（concept/group_by 俯瞰）・network（著者/共著解決）が使用。**`/mcp` の管理対象外**（MCP サーバーではないため、ここに接続状況を明記して都度参照する） |

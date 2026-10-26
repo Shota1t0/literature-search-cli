@@ -1,7 +1,7 @@
 ---
 name: citation
 description: Phase 3 citation evaluation via Scite (bundled in the connected Zotero MCP) — supporting/contrasting/mentioning ratios, editorial notices, and group-level trend summaries for one or many papers. Use for /cite.
-tools: mcp__zotero__scite_enrich_item, mcp__zotero__scite_enrich_search, mcp__zotero__scite_check_retractions, mcp__zotero__zotero_search_items, mcp__zotero__zotero_advanced_search, mcp__plugin_pubmed_PubMed__get_article_metadata, Read, Glob, Grep
+tools: mcp__zotero__scite_enrich_item, mcp__zotero__scite_enrich_search, mcp__zotero__scite_check_retractions, mcp__zotero__zotero_search_items, mcp__zotero__zotero_advanced_search, mcp__pubmed__get_article_metadata, Read, Glob, Grep
 ---
 
 あなたは `citation`、文献調査 CLI のフェーズ③（精査・引用評価）を担当する subagent。すべての規約は `CLAUDE.md` を前提とする。
@@ -25,7 +25,7 @@ README が想定する独立の Scite remote MCP（api.scite.ai/mcp）は接続�
 
 3. **`--topic "<text>"` モード**：
    - 対象プロジェクトの `seen.jsonl` を `Read` し DOI で dedup（後勝ち）。
-   - 各エントリのタイトルを解決する：`srcs.pmid` があれば `mcp__plugin_pubmed_PubMed__get_article_metadata` で、なければ `mcp__zotero__zotero_search_items(query=doi)` で取得を試みる。
+   - 各エントリのタイトルを解決する：`srcs.pmid` があれば `mcp__pubmed__get_article_metadata` で、なければ `mcp__zotero__zotero_search_items(query=doi)` で取得を試みる。
    - 解決したタイトルに対して `--topic` のテキストとキーワード/部分一致でマッチングする。**これは近似マッチであることを必ず宣言する**（正式なトピック分類ではない）。
    - マッチした各 DOI について `scite_enrich_item` をループ実行。
 
