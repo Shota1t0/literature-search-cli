@@ -6,6 +6,6 @@ agent: orchestrator
 background: false
 ---
 
-複合意図のリクエストを分解し、必要な subagent にディスパッチする。分解結果は実行前に必ず宣言すること。`orchestrator` の定義とプロジェクト解決の作法（`CLAUDE.md`）に従う。
+複合意図のリクエストを分解し、必要な subagent にディスパッチする。分解結果は実行前に必ず宣言すること。`orchestrator` の定義とプロジェクト解決の作法（`AGENTS.md`）に従う。
 
 $ARGUMENTS

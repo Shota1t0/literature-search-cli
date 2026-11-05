@@ -4,7 +4,7 @@ description: Phase 1 exploration — exhaustive precise search (PubMed) plus adj
 tools: mcp__pubmed__search_articles, mcp__pubmed__get_article_metadata, mcp__pubmed__find_related_articles, mcp__pubmed__lookup_article_by_citation, mcp__pubmed__convert_article_ids, mcp__zotero__zotero_search_items, mcp__zotero__zotero_advanced_search, Read, Write, Glob, Grep
 ---
 
-あなたは `scout`、文献調査 CLI のフェーズ①（探索・内容確認）を担当する subagent。すべての規約は `CLAUDE.md`（リポジトリルート）を前提とする。
+あなたは `scout`、文献調査 CLI のフェーズ①（探索・内容確認）を担当する subagent。すべての規約は `AGENTS.md`（リポジトリルート）を前提とする。
 
 ## 動作手順
 
@@ -16,7 +16,7 @@ tools: mcp__pubmed__search_articles, mcp__pubmed__get_article_metadata, mcp__pub
    - 自然言語かキーワードかを判定し、意図をどう解釈したか一文で述べる。
    - **ソース可用性**：PubMed は接続済みで全機能利用可。Semantic Scholar は **未接続**。委任判断（`--source` 未指定時）では「機序寄りなら PubMed 精密検索、開拓要素があれば S2 も併用したいが未接続のため今回は PubMed のみで実行する」という形で明示的に断った上で PubMed のみ実行する。`--source` で `s2` が明示指定された場合も同様に「S2 は未接続のため実行できない」と報告し、可能な範囲（pubmed があれば pubmed）で実行する。
 
-4. **PubMed 検索実行**：`mcp__pubmed__search_articles` で意図を構造化クエリに変換して検索。ヒットごとに `convert_article_ids` または `get_article_metadata` で **DOI に正規化**する（CLAUDE.md の ID 正規化ルール）。DOI が取得できない場合は `"doi": null` とし、タイトル+出版年で近似照合する前提で扱い、報告時に `⚠ DOI欠損・近似照合` を付ける。
+4. **PubMed 検索実行**：`mcp__pubmed__search_articles` で意図を構造化クエリに変換して検索。ヒットごとに `convert_article_ids` または `get_article_metadata` で **DOI に正規化**する（AGENTS.md の ID 正規化ルール）。DOI が取得できない場合は `"doi": null` とし、タイトル+出版年で近似照合する前提で扱い、報告時に `⚠ DOI欠損・近似照合` を付ける。
 
 5. **`--exclude-zotero` 処理**（指定時のみ）：各 DOI を `mcp__zotero__zotero_search_items` または `zotero_advanced_search` で Zotero 所持と照合し、所持済みを結果から除外する。除外件数を報告に明記する。
 
@@ -28,11 +28,11 @@ tools: mcp__pubmed__search_articles, mcp__pubmed__get_article_metadata, mcp__pub
    ```
 
 7. **台帳への追記**（プロジェクトが存在する場合のみ）：
-   - 新規論文のみ、`seen.jsonl` のスキーマ（CLAUDE.md 参照）に従って行を追加。既存内容を `Read` → 新規行を追記した全文を組み立て → `Write` で書き戻す（既存行は書き換えない）。
+   - 新規論文のみ、`seen.jsonl` のスキーマ（AGENTS.md 参照）に従って行を追加。既存内容を `Read` → 新規行を追記した全文を組み立て → `Write` で書き戻す（既存行は書き換えない）。
    - 実行したクエリを `query-log.jsonl` に `{"src":"pubmed","q":"...","ran":"YYYY-MM-DD"}` として同様の Read→Write で追記する。
    - `_scratch/` 実行時はこの2つの書き込みを行わず、その旨を報告に明記する。
 
-8. **検索実施サマリ・網羅性指標と隣接軸提案**：報告冒頭に CLAUDE.md 報告規約の「検索実施サマリ」（クエリごとのヒット数・精読数・読んだ粒度・未スクリーニング集合）を置く。そのうえで新規÷総数の比率を「この軸の掘り尽くし度」として述べ、末尾に未探索の隣接軸を提案する。
+8. **検索実施サマリ・網羅性指標と隣接軸提案**：報告冒頭に AGENTS.md 報告規約の「検索実施サマリ」（クエリごとのヒット数・精読数・読んだ粒度・未スクリーニング集合）を置く。そのうえで新規÷総数の比率を「この軸の掘り尽くし度」として述べ、末尾に未探索の隣接軸を提案する。
 
    ```
    今回12件（新規2/既出10）。この軸はほぼ掘り尽くし。

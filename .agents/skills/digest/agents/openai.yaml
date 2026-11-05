@@ -1,0 +1,4 @@
+# /digest は「方向確定後に人間が明示的に呼ぶ」もの（README §8.5・synthesizer.md）。
+# Codex が会話内容から暗黙に起動しないようにする。明示の `$digest` は従来どおり動く。
+policy:
+  allow_implicit_invocation: false

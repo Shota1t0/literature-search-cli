@@ -1,6 +1,6 @@
 # 文献調査CLI 仕様書
 
-Claude Code CLI 上で、subagent と MCP を用いて文献調査を体系化するシステムの仕様。
+Claude Code / Codex の CLI 上で、subagent と MCP を用いて文献調査を体系化するシステムの仕様。両ランタイムで同じ手順書が動く（対応関係・維持ルールは `AGENTS.md`「ランタイム対応」「デュアルランタイム維持規約」）。
 
 先行研究調査・メソッド検討・MSL の KOL 調査を、網羅的・俯瞰的・高速に行うことを目的とする。
 
@@ -36,16 +36,17 @@ Claude Code CLI 上で、subagent と MCP を用いて文献調査を体系化�
 
 ```
 research-cli/
-├── CLAUDE.md                     # 不変ルール・共通作法（4章）
-├── .claude/
-│   ├── agents/
+├── AGENTS.md                     # 不変ルール・共通作法（4章）の正本。Codex が直接読む
+├── CLAUDE.md                     # Claude Code 用エントリ（@AGENTS.md を import するだけ）
+├── .claude/                      # 手順書の正本（両ランタイム共通）
+│   ├── agents/                   #   役割（subagent）の手順
 │   │   ├── scout.md
 │   │   ├── cartographer.md
 │   │   ├── network.md
 │   │   ├── citation.md
 │   │   ├── synthesizer.md
 │   │   └── orchestrator.md
-│   └── commands/
+│   └── commands/                 #   コマンド（Claude Code では /scout 等）
 │       ├── new-project.md
 │       ├── scout.md
 │       ├── map.md
@@ -53,6 +54,10 @@ research-cli/
 │       ├── cite.md
 │       ├── digest.md
 │       └── ask.md
+├── .agents/skills/<cmd>/SKILL.md # Codex アダプタ：$scout 等の skill（正本を指すだけ）
+├── .codex/
+│   ├── config.toml               # Codex プロジェクト設定（PubMed MCP。trusted 時のみ有効）
+│   └── agents/<role>.toml        # Codex アダプタ：custom agent（正本を指すだけ）
 └── workspace/
     ├── _scratch/                 # 状態レスの使い捨て探索（gitignore）
     └── {project}/
@@ -215,6 +220,8 @@ research-cli/
 ---
 
 ## 8. コマンド仕様
+
+以下は Claude Code の slash command 表記（`/scout` 等）。Codex では同名の skill を `$scout` のように呼ぶ（`/skills` から選んでもよい）。`$ask` 以外の skill は subagent を起動せず main スレッドで実行し、`$ask` は main スレッドが orchestrator となって custom agent を呼び分ける。
 
 ### 8.1 `/scout <自然言語 or キーワード>`
 
@@ -384,7 +391,7 @@ orchestrator: 意図を分解しました:
 
 ---
 
-## 12. CLAUDE.md に書くべき共通作法
+## 12. AGENTS.md（共通規約の正本）に書くべき共通作法
 
 全 subagent が依存する土台。以下を明記する：
 
@@ -405,7 +412,7 @@ orchestrator: 意図を分解しました:
 ## 13. 実装順序（推奨）
 
 1. **MCP 接続確認**：OpenAlex（実装選定）/ PubMed / Semantic Scholar / Scite の各 MCP を接続。どのツールが実在するかで役割定義の書き方が変わるため最初。
-2. **CLAUDE.md**：共通作法（12 章）を記述。全 subagent の共通土台。
+2. **AGENTS.md**：共通作法（12 章）を記述。全 subagent の共通土台（Claude Code は CLAUDE.md の `@AGENTS.md` 経由で読む）。
 3. **scout.md**：入口①。ここが動けば残りは同じ型で展開できる。
 4. **残りの subagent / command を同型で展開**：cartographer → network → citation → synthesizer → orchestrator。
 

@@ -1,0 +1,14 @@
+# Codex プロジェクト設定（literature-search-cli）
+# - Codex はこのプロジェクトを trusted にした場合のみ、このファイルと .codex/agents/ を読み込む。
+# - 公開リポジトリにコミットされるため、機密やマシン固有のパスは書かない。
+#   Zotero MCP（ローカル exe + API キー）はユーザー設定 ~/.codex/config.toml 側に置く。
+# - MCP サーバー名は Claude Code 側の登録名と揃える（ツール名 mcp__<server>__<tool> を一致させるため）。
+#   追加・変更時は AGENTS.md「デュアルランタイム維持規約」4 と MCP 接続状況表を更新する。
+
+[mcp_servers.pubmed]
+url = "https://pubmed.mcp.claude.com/mcp"
+
+# Scite（citation の主経路）。OAuth のため、初回だけ `codex mcp login scite` で認証する。
+# 未認証の間、citation は Zotero MCP 同梱の Scite ツールに fallback する（.claude/agents/citation.md）。
+[mcp_servers.scite]
+url = "https://api.scite.ai/mcp"

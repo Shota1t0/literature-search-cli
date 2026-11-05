@@ -6,6 +6,6 @@ agent: network
 background: false
 ---
 
-対象著者・論文について、現在の seen 集合を起点にネットワーク探索を行う。OpenAlex 未接続の間の代替動作は `network` の定義に従うこと。プロジェクト解決の作法は `CLAUDE.md` に従う。
+対象著者・論文について、現在の seen 集合を起点にネットワーク探索を行う。OpenAlex 未接続の間の代替動作は `network` の定義に従うこと。プロジェクト解決の作法は `AGENTS.md` に従う。
 
 $ARGUMENTS

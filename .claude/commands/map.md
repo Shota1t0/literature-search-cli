@@ -6,6 +6,6 @@ agent: cartographer
 background: false
 ---
 
-Phase ②（俯瞰）を実行する。OpenAlex 未接続の間の代替動作は `cartographer` の定義に従うこと。プロジェクト解決・報告の作法は `CLAUDE.md` に従う。
+Phase ②（俯瞰）を実行する。OpenAlex 未接続の間の代替動作は `cartographer` の定義に従うこと。プロジェクト解決・報告の作法は `AGENTS.md` に従う。
 
 $ARGUMENTS
