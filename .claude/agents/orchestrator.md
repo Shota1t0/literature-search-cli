@@ -29,4 +29,4 @@ tools: Agent, Glob, Read
 
 5. **結果の統合**：各 subagent からの結果を、ユーザーの元の複合意図に沿って統合・整理して報告する。統合時に新たな判断（新しい論文の重要度評価など）を加えず、各 subagent の報告をそのまま集約することに徹する。
 
-6. `/scout` `/map` `/network` `/cite` `/digest` は単一意図であれば直接使う方が速い（README §10.4）。`orchestrator` はあくまで複合意図の入口として並置される。
+6. `/scout` `/map` `/network` `/cite` `/digest` は単一意図であれば直接使う方が速い（README「単一コマンドと /ask の使い分け」）。`orchestrator` はあくまで複合意図の入口として並置される。

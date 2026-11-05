@@ -1,425 +1,229 @@
-# 文献調査CLI 仕様書
+# literature-search-cli（文献調査CLI）
 
-Claude Code / Codex の CLI 上で、subagent と MCP を用いて文献調査を体系化するシステムの仕様。両ランタイムで同じ手順書が動く（対応関係・維持ルールは `AGENTS.md`「ランタイム対応」「デュアルランタイム維持規約」）。
+AI コーディングエージェントの subagent と MCP を使って、文献調査（先行研究調査・メソッド検討・MSL の KOL 調査）を網羅的・俯瞰的・高速に行うための CLI フレームワーク。
 
-先行研究調査・メソッド検討・MSL の KOL 調査を、網羅的・俯瞰的・高速に行うことを目的とする。
+**Claude Code と Codex のどちらでも同じ手順書で動く。** 手順書（`.claude/agents/`・`.claude/commands/`）と共通規約（`AGENTS.md`）を両ランタイムが共有し、Codex 側は正本を指すだけの薄いアダプタで動かす。
+
+- 共通規約の正本：[`AGENTS.md`](AGENTS.md)（台帳の書き方・報告の作法・ランタイム対応表・維持規約）
+- この README：目的・使い方・セットアップ・設計の考え方
 
 ---
 
 ## 1. 設計原則
 
-- **プログラム最小**：実装は薄い glue に留め、思考ロジックは subagent のプロンプトに寄せる。
+- **プログラム最小**：実装は薄い glue に留め、思考ロジックは subagent のプロンプトに寄せる。専用スクリプトは作らない。
 - **フレームワーク不変**：構造を頻繁に変えずに維持できること。
-- **状態は最小**：永続状態は `seen.jsonl`（プロジェクト単位）のみ。クエリログは永続化しない。
-- **連鎖の事前固定はしない**：subagent は定義済み順序で自動連鎖させない。
-- **フェーズ移行は人間が握る**：「探索→俯瞰→精査」の段階移行は人間が判断する。機械的な停止条件で自動遷移させない。
+- **状態は最小**：判定に使う永続状態は `seen.jsonl`（プロジェクト単位）のみ。
+- **連鎖の事前固定はしない**：subagent を定義済み順序で自動連鎖させない。
+- **フェーズ移行は人間が握る**：「探索→俯瞰→精査」の移行は人間が判断する。機械的な停止条件で自動遷移させない。
 - **透明性**：subagent / orchestrator は「どう解釈し、何をするか」を実行前に必ず言語化し、人間が軌道修正できる状態にする。
 
 ---
 
 ## 2. 全体フロー
 
-ユーザーの調査プロセスと subagent の対応：
-
 | フェーズ | ユーザーの動き | 担当 subagent | 主ソース |
 |---|---|---|---|
-| ① 探索・内容確認 | どんな論文があるかざっと調べ、内容を聞く | scout | PubMed（精密）+ Semantic Scholar（開拓） |
+| ① 探索・内容確認 | どんな論文があるかざっと調べ、内容を聞く | scout | PubMed（精密）+ Semantic Scholar（開拓・未接続） |
 | ② 俯瞰 | 分野全体を俯瞰し、手薄な軸・流行を判断 | cartographer / network | OpenAlex |
 | ③ 精査 | 引用評価・トレンドをチェック | citation | Scite |
-| 蓄積・出力 | キュレーション文献を蓄積、二次情報を出力 | synthesizer | Zotero / Obsidian |
+| 蓄積・出力 | キュレーション文献を蓄積、二次情報を出力 | synthesizer | Zotero / Obsidian（未接続） |
 
 段階移行は人間の判断で行う（「テーマが絞れてきた」等はセマンティックな判断であり自動化しない）。
 
 ---
 
-## 3. ディレクトリ構造
+## 3. 使い方
 
-```
-research-cli/
-├── AGENTS.md                     # 不変ルール・共通作法（4章）の正本。Codex が直接読む
-├── CLAUDE.md                     # Claude Code 用エントリ（@AGENTS.md を import するだけ）
-├── .claude/                      # 手順書の正本（両ランタイム共通）
-│   ├── agents/                   #   役割（subagent）の手順
-│   │   ├── scout.md
-│   │   ├── cartographer.md
-│   │   ├── network.md
-│   │   ├── citation.md
-│   │   ├── synthesizer.md
-│   │   └── orchestrator.md
-│   └── commands/                 #   コマンド（Claude Code では /scout 等）
-│       ├── new-project.md
-│       ├── scout.md
-│       ├── map.md
-│       ├── network.md
-│       ├── cite.md
-│       ├── digest.md
-│       └── ask.md
-├── .agents/skills/<cmd>/SKILL.md # Codex アダプタ：$scout 等の skill（正本を指すだけ）
-├── .codex/
-│   ├── config.toml               # Codex プロジェクト設定（PubMed MCP。trusted 時のみ有効）
-│   └── agents/<role>.toml        # Codex アダプタ：custom agent（正本を指すだけ）
-└── workspace/
-    ├── _scratch/                 # 状態レスの使い捨て探索（gitignore）
-    └── {project}/
-        ├── seen.jsonl            # 到達論文（DOI 正本、追記専用、機械照合）
-        ├── query-log.jsonl       # 打ったクエリ（参照専用、判定に使わない）
-        └── landscape.md          # 目的・分野俯瞰メモ（人間可読の二次情報）
-```
+### 3.1 コマンド一覧
 
----
-
-## 4. 状態管理
-
-### 4.1 seen.jsonl
-
-- **役割**：到達した論文の集合。重複回避・新規判定・網羅度計測・Zotero 連携の土台。
-- **形式**：1 論文 1 行の JSONL。**追記専用**（append-only）。
-- **正本 ID は DOI**。各ソースの固有 ID は併記する。
-
-**スキーマ**
-
-```jsonc
-{
-  "doi": "10.1038/s41586-025-xxxxx",   // 正本。欠損時は null
-  "srcs": {                             // 各ソースの固有 ID（取得できたものだけ）
-    "pmid": "38xxxxxx",
-    "oaid": "W27xxxxx",
-    "s2":   "corpusId:xxxxx"
-  },
-  "seen": "2026-08-07",                 // 初回到達日
-  "zot":  false                         // Zotero 所持フラグ
-}
-```
-
-**DOI 欠損時の扱い（preprint 等）**
-- DOI が取得できない論文は `"doi": null` とし、**タイトル + 出版年で近似照合**する。
-- 近似照合したものは報告時にフラグ（例：`⚠ DOI欠損・近似照合`）を立て、人間が確認できるようにする。
-
-### 4.2 ID 正規化ルール
-
-- どのソースから取得した論文も、**まず DOI に正規化**してから seen.jsonl と照合する。
-- これにより「PubMed で見た論文を OpenAlex で再発見しても既出と判定できる」＝ソース横断の重複回避を担保する。
-- 生医学領域では大半の論文が DOI を持つため、DOI 正本化が有効。
-
-### 4.3 query-log.jsonl（クエリ履歴・参照専用）
-
-- **役割**：打った検索クエリの履歴。「もっと他の文献を」と求められた時に、scout が**既出の角度を避けて新しい角度を組む**ための参照材料。
-- **判定には使わない**。「実行済みだからスキップ」という重複判定には使わない。理由：同じキーワードでも着目点（気になる情報）が毎回微妙に違えば拾う論文も変わるため、クエリ文字列の一致で再実行要否を決めることはできない。着目点をキーに含める案（lens）も、毎回異なるため照合が成立せず不採用。
-- したがって **query-log は「判定するキー」ではなく「参照する履歴」**として割り切る。判定しないので正規化も不要。
-- **発火タイミング**：常時読むのではなく、「もっと他を」「別の角度で」等と明示的に求められた時だけ読む。ゆえに肥大してもコンテキストを圧迫しない（全部を読ませないため）。
-- **形式**：人間が打った検索文字列を時系列でそのまま残すだけの最小台帳。追記専用。
-
-**スキーマ**
-
-```jsonc
-{"src":"pubmed","q":"GENE-A pathway regulation","ran":"2026-08-07"}
-{"src":"pubmed","q":"GENE-A binding partners","ran":"2026-08-09"}
-```
-
-**論文レベルの重複回避との分担**
-- query-log は**クエリの角度**の重複を防ぐ（同じ角度を無意識に繰り返さない、被らない角度を提案する）。
-- 論文の重複回避は依然 **seen.jsonl** が担う。新しい角度で検索しても生ヒットには既出論文が混じるが、それは seen が弾く。角度の重複と論文の重複は別レイヤ。
-- この「角度を広げる」機能は、scout の**隣接軸提案（新規開拓）のプロジェクト全体版**にあたる（8.1 参照）。今回の 1 検索を起点に隣を提案するのが隣接軸提案、プロジェクトの全検索履歴を見渡して未着手の角度を提案するのが query-log 参照。
-
-**探索の意味的な要約**（効いた軸・手薄な軸など）は、これとは別に人間可読の二次情報として `landscape.md` に残す（4.5 / 5.1）。query-log は生の履歴、landscape.md は意味づけ、と役割が分かれる。
-
-### 4.4 スクラッチ（状態レス探索）
-
-- 「軽い気持ちの検索」は `_scratch/` で実行し、状態（seen.jsonl）を残さない。
-- **プロジェクトを作る＝本腰を入れる意思表示**。状態の有無が「探索モード / 収集モード」を自然に分岐させる。
-
-### 4.5 3 台帳の役割分担
-
-状態は 3 層に分かれ、役割が完全に分離している。混ぜない。
-
-| 台帳 | 中身 | 「重複」の意味 | 判定に使うか | 読み方 |
-|---|---|---|---|---|
-| **seen.jsonl** | 到達論文（DOI） | この**論文**を見たか | する | 機械が照合 |
-| **query-log.jsonl** | 打ったクエリ（生文字列） | この**角度**で検索したか | しない（参照のみ） | 「もっと他を」の時だけ読む |
-| **landscape.md** | 目的・効いた軸・手薄な軸 | どこへ**向かう**か | しない | 人間可読 |
-
-- seen は「どの論文を見たか」、query-log は「どの角度で探したか」、landscape は「なぜ・どこへ向かうか」。
-- 機械可読の状態（seen / query-log）と、人間可読の文脈（landscape）を分離する。目的・意味づけは landscape.md に置き、seen.jsonl には入れない。landscape は**判断の材料**であって**判断そのもの**ではない（機械照合は seen が担い続ける）。
-
----
-
-## 5. プロジェクト管理
-
-- 状態肥大・破損リスクを避けるため、**プロジェクト単位で管理**する（トピック横断のグローバル DB は作らない）。
-- 各プロジェクトは自己完結フォルダ。複製・破棄が容易。
-
-### 5.1 `/new-project <name>`
-
-- 専用スクリプトは作らない。以下を置くだけの軽い処理：
-  - `workspace/{name}/seen.jsonl`（空ファイル）
-  - `workspace/{name}/query-log.jsonl`（空ファイル）
-  - `workspace/{name}/landscape.md`（テンプレ）
-
-**landscape.md テンプレ**
-
-```markdown
-# {name}
-
-## 目的
-（この調査が何を目指すか。1〜2行。例：疾患Xの重症度進展を予測する
-生存解析手法の選定と先行手法の網羅。バイオマーカーとしての位置づけを固める。）
-
-## 探索済みの軸
-
-## 手薄な軸
-
-## 効いた検索軸
-
-## 効かなかった／広すぎた軸
-```
-
-- **目的欄**は orchestrator / scout が委任判断（ソース選択・隣接軸提案）の材料として読む。
-  目的が「メソッド選定」なら手法クラスタ・被引用集中を重視、「先行研究の網羅」なら漏れ防止優先、
-  「KOL 把握」なら著者・所属・活動を優先、というように委任の質が上がる。
-- **効いた／効かなかった軸**は、人が後で見返す厳選メモ（生ログではない）。効かなかった軸の記録は「もう試した、無駄」という人間版の重複回避になる。
-
-### 5.2 カレントプロジェクトの解決
-
-- コマンドは対象プロジェクトを知る必要がある。
-- **明示指定を基本**とし（例：`/scout gene-x-pathway <query>`）、**省略時は直近に触れたプロジェクト**にフォールバックする。
-- `/new-project` せずにコマンドを打った場合は `_scratch/`（状態レス）で実行する。
-
-### 5.3 KOL 調査プロジェクト（MSL 用途）
-
-- 論文の重複回避と、人物（KOL）の追跡は関心が異なるため混ぜない。
-- KOL 調査は**著者軸の別プロジェクト**として切り出す。network / cartographer を著者起点で使い、著作・共著関係を追う。
-- （③まで固めた後に別途詳細設計する想定。本仕様では位置づけのみ規定。）
-
----
-
-## 6. MCP（外部ソース）
-
-| ソース | 用途 | 状態 | 備考 |
+| Claude Code | Codex | 担当 | 内容 |
 |---|---|---|---|
-| **PubMed** | ① 精密な網羅探索 | 要接続 | MeSH 語彙で精密検索。神経・薬剤疫学領域と相性良 |
-| **Semantic Scholar** | ① 新規開拓 | 要接続 | recommendations / influential citations で周辺開拓 |
-| **OpenAlex** | ② 俯瞰・著者ネットワーク | 要接続 | 引用グラフ・concept 俯瞰・trend 集計・著者解決を一元提供。複数実装ありどれか選定要 |
-| **Scite** | ③ 引用文脈評価 | 契約済・利用可 | 引用文を supporting / contrasting / mentioning に分類。remote MCP（api.scite.ai/mcp） |
-| **Zotero** | 文献蓄積・所持照合 | 運用中 | キュレーション済み文献のベース。`--exclude-zotero` の照合先 |
-| **Obsidian** | 二次情報出力 | 運用中 | まとめ・レポートの出力先 |
+| `/new-project <name>` | `$new-project <name>` | （直接実行） | プロジェクト作成（`seen.jsonl` / `query-log.jsonl` / `landscape.md`） |
+| `/scout [project] <query>` | `$scout ...` | scout | ① PubMed で網羅探索、新規/既出判定、隣接軸提案 |
+| `/map [project]` | `$map ...` | cartographer | ② seen 集合を OpenAlex で俯瞰し、`landscape.md` 更新を提案 |
+| `/network [project] <author or work>` | `$network ...` | network | 著者・共著・共引用ネットワークから周辺論文を発掘 |
+| `/cite [project] <DOI> \| --topic "<text>" \| --recent N` | `$cite ...` | citation | ③ Scite で supporting / contrasting / mentioning・撤回を評価（単一・群） |
+| `/digest [project] [対象] [--zotero]` | `$digest ...` | synthesizer | 要約・ファクトチェック → 二次情報出力。Zotero 蓄積は明示時のみ |
+| `/ask <複合クエリ>` | `$ask ...` | orchestrator | 複合意図を分解し、必要な subagent だけを呼び分ける |
 
-- OpenAlex の Boolean 検索は PubMed ほど精密でないため、自然言語を丸ごと 1 クエリにせず **concept / filter に分解**して組む（scout の作法に反映）。
+- Codex では skill として `$scout` のように呼ぶ（`/skills` から選んでもよい）。`$digest` は人間が明示的に呼ぶものなので、Codex が会話から暗黙に起動しない設定にしてある。
+- 先頭トークンが既存プロジェクト名ならそのプロジェクト、省略時は直近に触れたプロジェクト、プロジェクトが無ければ `_scratch/`（状態を残さない）で実行する。
 
----
+### 3.2 主なオプション
 
-## 7. ソース選択（委任デフォルト）
+- `--source <list>`：ソースを明示指定（`--source pubmed` / `--source pubmed,s2`）。省略時は scout が意図から選び、**選択理由を実行前に宣言**する。
+- `--exclude-zotero`：Zotero に所持済みの論文を除き、未所持だけを報告する（scout / ask に付けられる横断フィルタ）。
+- `/cite` の入力形態：単一 DOI／`--topic "<text>"`（seen 内のタイトル近似マッチ群）／`--recent N`（seen に最近追加した N 件）。複数件では群としてのトレンドも返す。
+- `/digest`：Zotero への追加は**既定では行わない**。「Zoteroに登録して」等の明示要求がある時だけ追加し、`seen.jsonl` の `zot` フラグを更新する。
 
-- **委任をデフォルト**とする：scout / orchestrator が意図から適切なソースを選び、選択理由を宣言してから実行する。
-- **明示指定で上書き**可能：`--source` フラグ。
-  ```
-  /scout <query>                    # 委任：source を自動選択＋理由提示
-  /scout --source pubmed <query>    # 明示：単一ソース
-  /scout --source pubmed,s2 <query> # 明示：複数ソース
-  ```
+### 3.3 単一コマンドと `/ask` の使い分け
 
----
+| 入口 | 使う場面 |
+|---|---|
+| `/scout` `/map` `/network` `/cite` `/digest` | 意図が単一のとき（直接・高速） |
+| `/ask <複合クエリ>` | 探索 + 俯瞰 + 著者 + Zotero 照合が絡むとき |
 
-## 8. コマンド仕様
-
-以下は Claude Code の slash command 表記（`/scout` 等）。Codex では同名の skill を `$scout` のように呼ぶ（`/skills` から選んでもよい）。`$ask` 以外の skill は subagent を起動せず main スレッドで実行し、`$ask` は main スレッドが orchestrator となって custom agent を呼び分ける。
-
-### 8.1 `/scout <自然言語 or キーワード>`
-
-フェーズ①。網羅探索と内容確認。
-
-**入力**
-- 自然言語（会話的）とキーワード羅列の**両方**を第一級に受ける。
-- 自然言語の場合、意図を OpenAlex / PubMed の構造化クエリに翻訳する。
-
-**動作**
-1. 意図を解釈し、**解釈内容とソース選択理由を宣言**（例：「機序寄りの精密探索なので PubMed、開拓のため S2 併用」）。
-2. ソースを検索。
-3. 取得結果を DOI に正規化し seen.jsonl と照合。
-4. **報告：既出も含めて全件表示**し、新規を視覚的にマークする（人は忘れるため既出も出す）。
-   ```
-   🆕 [新規] Author 2025  ProteinX drives PathwayY dysregulation...  (cited 34)
-      [既出] Author 2023  ProteinZ gain-of-function...               (cited 89)
-   ```
-5. 新規論文を seen.jsonl に追記。打ったクエリを query-log.jsonl に追記。
-6. **末尾に隣接軸を提案**（新規開拓）：seen の外側へ広げられる未探索軸を提示。
-   ```
-   今回12件（新規2/既出10）。この軸はほぼ掘り尽くし。
-   未探索の隣接軸：PathwayA × CellTypeB / DrugClassC 側からの逆引き ...
-   ```
-
-**「もっと他を」への対応（query-log 参照）**
-- 「もっと他の文献を」「別の角度で」等と求められた時のみ query-log.jsonl を読む。
-- そのプロジェクトで**過去に打ったクエリ＝既出の角度**を提示し、被らない新しい角度を組んで検索する。
-  ```
-  > GENE-Aでもっと他の文献を探して
-  scout: このプロジェクトでGENE-Aは過去2回検索しています:
-         "GENE-A pathway regulation" / "GENE-A binding partners"
-         重複を避け、まだ当てていない角度で探します:
-         → "GENE-A variant pathogenicity" / "GENE-A structural complex"
-         生ヒット → seen照合で既出を除外
-  ```
-- これは隣接軸提案（今回の 1 検索を起点に隣を提案）の**プロジェクト全体版**（全検索履歴を見渡して未着手の角度を提案）。
-- 同じキーワードでも着目点が違えば拾う論文が変わる問題は、ここで「角度を変えた再検索」として自然に扱う。生ヒットに混じる既出論文は seen.jsonl が弾き、「前回スルーして今回目に入った論文」が新規として際立つ。
-
-**網羅性の指標**
-- 新規/既出比（new ÷ total）の低下を「その軸の掘り尽くし度」として扱う。
-
-**オプション**
-- `--source <list>`：ソース明示。
-- `--exclude-zotero`：Zotero 所持を除外し、未所持のみ報告（横断フィルタ、9 章）。
-
-### 8.2 `/map`
-
-フェーズ②。分野俯瞰。
-
-**動作**
-- OpenAlex の concept / group_by を用い、現 seen 集合を材料に分野を地図化。
-- 手薄な軸・流行（trend）・検索時に足すべき方向を提示。
-- 結果を `landscape.md` に人間可読で記録。
-
-### 8.3 `/network <author or work>`
-
-著者・共引用ネットワークから周辺論文を発掘。フェーズ②③どちらからでも横断的に呼べる補助。
-
-**動作**
-- OpenAlex で著者解決・共著・共引用を辿り、周辺論文を提示。
-- KOL 調査でも中核として使う。
-
-### 8.4 `/cite <target>`
-
-フェーズ③。Scite による引用評価。**単一に限らず複数・群を扱える。**
-
-**入力形態**
-
-```
-/cite 10.1038/xxxxx           # 単一 DOI
-/cite --topic "PathwayY dysregulation" # seen 内の該当群をまとめて
-/cite --recent N              # 直近 seen した N 本を横断
-```
-
-**動作**
-- 各論文の supporting / contrasting / mentioning 比・被引用数を提示。
-- 複数渡された場合は**群としてのトレンド俯瞰**も返す（例：この論文群のうち再現されている / 係争中のものはどれか）。
-
-### 8.5 `/digest`
-
-まとめ・内容チェック。方向確定後に人間が明示的に呼ぶ。
-
-**動作**
-- synthesizer が対象文献のまとめ・内容チェックを行う。
-- キュレーション文献を **Zotero** へ蓄積（`zot` フラグ更新）。
-- 二次情報を **Obsidian** へ出力。
-
-### 8.6 `/ask <複合クエリ>`
-
-複合意図の入口。orchestrator が意図を動的分解し、必要な subagent を呼び分ける（10 章）。
-
-### 8.7 `/new-project <name>`
-
-プロジェクト作成（5.1）。
-
----
-
-## 9. 横断フィルタ：`--exclude-zotero`
-
-- 「Zotero にないものだけ探す」は頻出パターン。**どの探索コマンド（scout / ask）にも付与できる横断フィルタ**として提供する。
-- 動作：Zotero の現所持リストを取得して除外セット化し、検索結果から所持済みを除いて報告。
-- seen.jsonl の `zot` フラグと同じ発想を Zotero 本体に広げたもの。新規開拓（既知の外を探す）と一直線に繋がる。
-
----
-
-## 10. オーケストレーション（複合意図対応）
-
-### 10.1 目的
-
-ユーザーの実際の問いは、探索・俯瞰・著者・Zotero 照合が **1 つの意図の中で絡む**ことがある。単一 subagent の縦割りでは複合意図が境界をまたいで落ちるため、これを拾う層を設ける。
-
-**複合クエリの例**
-- 「遺伝子データ×グラフネットワークで、分野の中心になっている手法を使った研究」
-  = 検索（遺伝子×graph network）+ 俯瞰（中心的手法の同定＝引用集中・concept 密度）+ 精査（被引用インパクト）
-- 「Zotero 内にない、GENE-A に関わる文献」
-  = 検索（GENE-A）+ 著者/周辺（network）+ Zotero 差分（所持除外）
-
-### 10.2 連鎖ではなくディスパッチ
-
-- **固定連鎖（事前に順序を決めて自動で流す）とは異なる。** これは今も採用しない。
-- orchestrator は意図を**その場で分解**し、必要な subagent だけを動的に呼ぶ（意図駆動ディスパッチ）。問いごとに必要な部品が変わるため、順序を事前固定できない。
-
-### 10.3 動作
-
-1. `/ask <自然言語の複合クエリ>` を受ける。
-2. 意図を分解：「検索軸は何か / 俯瞰が要るか / 著者が要るか / Zotero 照合が要るか」。
-3. **分解結果を宣言**してから実行（透明性維持、人間が軌道修正可能）。
-4. 必要な subagent を必要な順で呼ぶ。
-
-**例**
+orchestrator は**固定連鎖ではなく、問いごとにその場で分解してディスパッチ**する。新しい判断はせず、既存 subagent を呼び分けるだけの薄い層。
 
 ```
 > Zotero内にないGENE-A関連文献を探して
 orchestrator: 意図を分解しました:
   1. ZoteroのGENE-A所持リストを取得（除外セット化）
-  2. PubMed+S2でGENE-A探索
+  2. PubMedでGENE-A探索
   3. Zotero集合との差分 = 未所持のみ報告
   → 🆕 [未所持] Author 2025 GENE-A pathway regulation...
 ```
 
-### 10.4 位置づけ
+Claude Code では各コマンドが subagent に fork して動く。Codex では単一コマンドはメインのスレッドで直接動き、`$ask` だけがメインのスレッドを orchestrator にして custom agent（`.codex/agents/`）を呼び分ける。
 
-- 個別コマンド（`/scout` 等）は**残す**：単一意図なら直接呼ぶ方が速い。
-- `/ask` は複合意図の入口として並置。
-- orchestrator は**新しい判断をせず、既存 subagent を呼び分けるだけの薄い層**。中身はプロンプト（意図分解の作法）であってコードではない。「プログラム最小・フレームワーク不変」を保つ。
+### 3.4 報告の形
 
-| 入口 | 使う場面 |
-|---|---|
-| `/scout` `/map` `/network` `/cite` `/digest` | 意図が単一のとき（直接・高速） |
-| `/ask <複合クエリ>` | 探索+俯瞰+著者+Zotero 照合が絡むとき |
+- 冒頭に**検索実施サマリ**（クエリごとのヒット数・読んだ件数と粒度・未スクリーニング集合）。
+- 結果は**既出も含めて全件表示**し、新規をマークする（人は忘れるため既出も出す）。
+- 末尾に**隣接軸**を提案する。新規÷総数の低下を「その軸の掘り尽くし度」とみなす。
 
----
+```
+🆕 [新規] Author 2025  ProteinX drives PathwayY dysregulation...  (cited 34)
+   [既出] Author 2023  ProteinZ gain-of-function...               (cited 89)
 
-## 11. subagent 一覧
+今回12件（新規2/既出10）。この軸はほぼ掘り尽くし。
+未探索の隣接軸：PathwayA × CellTypeB / DrugClassC 側からの逆引き ...
+```
 
-| subagent | 役割 | 主ソース | seen.jsonl との関係 |
-|---|---|---|---|
-| scout | ① 網羅探索・内容確認・新規判定・隣接軸提案 | PubMed / S2 | 新規論文を追記 |
-| cartographer | ② 分野俯瞰・手薄な軸と流行の判定 | OpenAlex | seen 集合を材料に俯瞰 |
-| network | 著者・共引用ネットワークから周辺発掘 | OpenAlex | seen を起点に拡張 |
-| citation | ③ 引用回数・引用文脈・群トレンド評価 | Scite | seen 内論文を評価 |
-| synthesizer | まとめ・内容チェック → Zotero / Obsidian | Zotero / Obsidian | zot フラグ更新 |
-| orchestrator | 複合意図の分解・subagent 呼び分け | （呼び分けのみ） | — |
-
-- subagent 同士は共有する seen.jsonl を通じて**緩く連携**する（明示的な受け渡し配線は不要）。
+「もっと他を」「別の角度で」と頼むと、scout はそのプロジェクトで過去に打ったクエリ（`query-log.jsonl`）を見せ、被らない角度で再検索する。
 
 ---
 
-## 12. AGENTS.md（共通規約の正本）に書くべき共通作法
+## 4. セットアップ
 
-全 subagent が依存する土台。以下を明記する：
+### 4.1 共通（ローカルのみ・コミットしない）
 
-- **3 台帳の分離**：seen.jsonl（論文の重複回避・機械照合）/ query-log.jsonl（角度の参照・判定に使わない）/ landscape.md（目的・軸・人間可読）。役割を混ぜない。
-- **seen.jsonl 規約**：追記専用、DOI 正本、スキーマ、DOI 欠損時の近似照合とフラグ。
-- **ID 正規化**：取得結果は必ず DOI に正規化してから照合。DOI 欠損時はタイトル+年で近似照合。
-- **query-log 規約**：打ったクエリを追記。判定には使わず、「もっと他を」と求められた時だけ読み、既出の角度を避けて新角度を組む材料にする。論文の重複回避は seen.jsonl が担う。
-- **目的の参照**：landscape.md 冒頭の目的欄を、ソース委任・隣接軸提案の判断材料として読む。
-- **ソース委任の作法**：意図からソースを選び、選択理由を宣言。`--source` で上書き可。
-- **クエリ翻訳の作法**：自然言語を concept / filter に分解して構造化クエリを組む（OpenAlex の Boolean 制約への対処）。解釈を必ず提示。
-- **報告の作法**：既出も含めて全件表示、新規をマーク、末尾に隣接軸を提案。
-- **カレントプロジェクト解決**：明示指定優先、省略時は直近、未作成時は `_scratch/`。
-- **orchestrator の意図分解作法**：検索/俯瞰/著者/Zotero照合の要否を判定、分解結果を宣言してから実行。
-- **透明性の原則**：解釈・選択・分解を実行前に言語化し、人間が軌道修正できる状態にする。
+| ファイル | 中身 | 用途 |
+|---|---|---|
+| `.env` | `ZOTERO_API_KEY` / `ZOTERO_LIBRARY_ID` / `ZOTERO_LIBRARY_TYPE` | Zotero MCP の書き込み系 |
+| `.openalex-mailto` | メールアドレス 1 行 | OpenAlex の polite pool（無ければ初回に聞かれる） |
+
+どちらも gitignore 済み。Zotero MCP はローカル API を使うため、**Zotero デスクトップを起動しておく**。
+
+### 4.2 Claude Code
+
+```bash
+claude mcp add --transport http --scope user pubmed https://pubmed.mcp.claude.com/mcp
+claude mcp add --transport http --scope local scite https://api.scite.ai/mcp   # 初回に OAuth 認証
+```
+
+Zotero MCP（`zotero-mcp serve`）は `zotero` という名前で登録する。`CLAUDE.md` は `@AGENTS.md` を読み込むだけなので、規約の追加は `AGENTS.md` に書く。接続状況は `/mcp` で確認する。
+
+### 4.3 Codex
+
+1. このフォルダで Codex を起動し、**フォルダを trusted にする**（初回の確認で「信頼する」）。trusted でないと `.codex/config.toml`（PubMed / Scite）と `.codex/agents/` が読み込まれない。親フォルダの trust は引き継がれない。
+2. `codex mcp login scite` で Scite に一度だけ認証する。未認証の間、`$cite` は Zotero 同梱の Scite ツールで動く。
+3. Zotero MCP はマシン固有の設定なので、ユーザー設定 `~/.codex/config.toml` に `zotero` という名前で登録する。API キーを渡していない場合、書き込み系（`$digest` の Zotero 蓄積）は動かない。
+4. OpenAlex（`$map` / `$network`）の `curl.exe` は、Windows の sandbox 内では TLS が通らないため、sandbox 外での実行を承認する。
+
+接続状況は `/mcp` または `codex mcp list` で確認する。
 
 ---
 
-## 13. 実装順序（推奨）
+## 5. 状態管理
 
-1. **MCP 接続確認**：OpenAlex（実装選定）/ PubMed / Semantic Scholar / Scite の各 MCP を接続。どのツールが実在するかで役割定義の書き方が変わるため最初。
-2. **AGENTS.md**：共通作法（12 章）を記述。全 subagent の共通土台（Claude Code は CLAUDE.md の `@AGENTS.md` 経由で読む）。
-3. **scout.md**：入口①。ここが動けば残りは同じ型で展開できる。
-4. **残りの subagent / command を同型で展開**：cartographer → network → citation → synthesizer → orchestrator。
+### 5.1 三層台帳
+
+状態は 3 層に分かれ、役割が完全に分離している。混ぜない。
+
+| 台帳 | 中身 | 「重複」の意味 | 判定に使うか | 読み方 |
+|---|---|---|---|---|
+| **seen.jsonl** | 到達論文（DOI 正本） | この**論文**を見たか | する | 機械が照合 |
+| **query-log.jsonl** | 打ったクエリ（生文字列） | この**角度**で検索したか | しない（参照のみ） | 「もっと他を」の時だけ読む |
+| **landscape.md** | 目的・効いた軸・手薄な軸 | どこへ**向かう**か | しない | 人間可読 |
+
+- **seen.jsonl**：1 論文 1 行・追記専用。どのソースの論文も **DOI に正規化**してから照合するので、PubMed で見た論文を OpenAlex で再発見しても既出と判定できる。DOI が無い論文はタイトル + 出版年で近似照合し、`⚠ DOI欠損・近似照合` を付ける。フラグ更新（`zot` 等）も既存行を書き換えず、新しい行を追記する（DOI ごとに最後の行が正）。
+- **query-log.jsonl**：重複判定には使わない。同じキーワードでも着目点が違えば拾う論文が変わるため、クエリ文字列の一致で再実行の要否は決められない。「もっと他を」と言われた時だけ読み、既出の角度を避ける材料にする。
+- **landscape.md**：目的と探索の意味づけ。目的欄は scout / orchestrator がソース選択・隣接軸提案の判断材料として読む（「メソッド選定」なら手法クラスタ・被引用集中、「先行研究の網羅」なら漏れ防止、「KOL 把握」なら著者・所属を優先）。効かなかった軸の記録は「もう試した」という人間版の重複回避になる。
+
+スキーマと書き込み方法の詳細は `AGENTS.md` を参照。
+
+### 5.2 プロジェクト
+
+- 状態の肥大・破損を避けるため、**プロジェクト単位で管理**する（トピック横断のグローバル DB は作らない）。各プロジェクトは自己完結フォルダで、複製・破棄が容易。
+- `/new-project <name>` は `workspace/<name>/` に空の `seen.jsonl`・`query-log.jsonl` と、次の雛形の `landscape.md` を置くだけ。
+
+  ```markdown
+  # {name}
+
+  ## 目的
+  （この調査が何を目指すか。1〜2行。）
+
+  ## 探索済みの軸
+
+  ## 手薄な軸
+
+  ## 効いた検索軸
+
+  ## 効かなかった／広すぎた軸
+  ```
+
+- **プロジェクトを作る＝本腰を入れる意思表示**。軽い検索は `_scratch/`（状態を残さない）で行う。
+- `workspace/` の中身（調査内容）はローカル専用で、リポジトリには含めない。
+- KOL 調査（MSL 用途）は、論文の重複回避と関心が異なるため**著者軸の別プロジェクト**として切り出す想定（詳細は未設計）。
 
 ---
 
-## 14. 未確定・後続設計事項
+## 6. 外部ソース
 
-- OpenAlex MCP の具体実装の選定（複数実装が存在）。
+| ソース | 用途 | 接続方式 |
+|---|---|---|
+| **PubMed** | ① 精密な網羅探索（MeSH 語彙） | MCP（`pubmed`、認証不要） |
+| **Semantic Scholar** | ① 新規開拓 | 未接続 |
+| **OpenAlex** | ② 俯瞰・著者ネットワーク | MCP ではなく公開 REST API を `curl` で直接呼ぶ |
+| **Scite** | ③ 引用文脈評価（supporting / contrasting / mentioning、撤回） | MCP（`scite`、契約済み・OAuth）。Zotero 同梱の Scite ツールが fallback |
+| **Zotero** | 文献蓄積・所持照合（`--exclude-zotero` の照合先） | MCP（`zotero`、ローカル） |
+| **Obsidian** | 二次情報の出力先 | 未接続（`workspace/<project>/digest-*.md` に代替出力） |
+
+- MCP のサーバー名を両ランタイムで揃えているので、ツール名（`mcp__pubmed__*` 等）が一致し、手順書を書き分けずに済む。
+- OpenAlex の Boolean 検索は PubMed ほど精密でないため、自然言語を丸ごと 1 クエリにせず concept / filter に分解して組む。
+- 各ランタイムでの最新の接続状況は `AGENTS.md`「MCP 接続状況」を正とする。
+
+---
+
+## 7. ディレクトリ構造
+
+```
+literature-search-cli/
+├── AGENTS.md                     # 共通規約の正本（Codex が直接読む）
+├── CLAUDE.md                     # Claude Code 用エントリ（@AGENTS.md を読み込むだけ）
+├── .claude/                      # 手順書の正本（両ランタイム共通）
+│   ├── agents/                   #   役割の手順：scout / cartographer / network / citation / synthesizer / orchestrator
+│   └── commands/                 #   コマンド：new-project / scout / map / network / cite / digest / ask
+├── .agents/skills/<cmd>/SKILL.md # Codex アダプタ：$scout 等の skill（正本を指すだけ）
+├── .codex/
+│   ├── config.toml               # Codex プロジェクト設定（PubMed / Scite MCP。trusted 時のみ有効）
+│   └── agents/<role>.toml        # Codex アダプタ：custom agent（正本を指すだけ）
+└── workspace/                    # 調査プロジェクト（ローカル専用・gitignore）
+    ├── _scratch/                 #   状態レスの使い捨て探索
+    └── <project>/
+        ├── seen.jsonl
+        ├── query-log.jsonl
+        └── landscape.md
+```
+
+---
+
+## 8. 両ランタイムでの維持
+
+構成を変える時は、どちらのランタイムで作業していても `AGENTS.md`「デュアルランタイム維持規約」に従う。要点：
+
+- 手順・規約は正本（`AGENTS.md`・`.claude/commands/`・`.claude/agents/`）だけを直す。アダプタに手順を書き写さない。
+- コマンド・役割の追加／改名／削除は、Claude Code 側と Codex 側を対で行う。
+- MCP は両ランタイムに同じサーバー名で登録する。
+- 機密・個人設定はコミットしない（このリポジトリは公開）。
+
+---
+
+## 9. 未確定・後続設計事項
+
+- Semantic Scholar の接続（scout の開拓探索）。
+- Obsidian MCP の接続と、synthesizer の出力先の切り替え（ツール名 `mcp__obsidian__*` は未確定）。
 - KOL 調査プロジェクトの詳細設計（著者軸・共著関係追跡の状態設計）。
-- DOI 欠損 preprint の近似照合の作り込み度合い。
+- DOI 欠損 preprint の近似照合をどこまで作り込むか。

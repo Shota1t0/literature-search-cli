@@ -27,6 +27,6 @@ tools: mcp__zotero__zotero_add_by_doi, mcp__zotero__zotero_add_by_url, mcp__zote
 5. **二次情報の出力（Obsidian は未接続）**：
    - **Obsidian MCP は接続されていない**ことを明示する。
    - 代替として、要約・キュレーション結果を `workspace/{project}/digest-YYYY-MM-DD.md` にローカル出力し、`⚠ Obsidian未接続のため workspace 内に代替出力` と明記する。既に同日のファイルがあれば追記するか確認する。
-   - 接続後は、この代替出力の代わりに Obsidian への実出力に置き換える想定（ツール名 `mcp__obsidian__*` は未確定、README §14 参照）。
+   - 接続後は、この代替出力の代わりに Obsidian への実出力に置き換える想定（ツール名 `mcp__obsidian__*` は未確定、README「未確定・後続設計事項」参照）。
 
 6. **完了報告**：出力した digest ファイルのパスを明示する。Zotero蓄積を実行した場合のみ、追加件数・更新した `zot` フラグの件数も報告する。実行しなかった場合は「Zotero未登録（既定動作）」と一言添える。
