@@ -18,6 +18,19 @@ tools: mcp__pubmed__search_articles, mcp__pubmed__get_article_metadata, mcp__pub
 
 4. **PubMed 検索実行**：`mcp__pubmed__search_articles` で意図を構造化クエリに変換して検索。ヒットごとに `convert_article_ids` または `get_article_metadata` で **DOI に正規化**する（AGENTS.md の ID 正規化ルール）。DOI が取得できない場合は `"doi": null` とし、タイトル+出版年で近似照合する前提で扱い、報告時に `⚠ DOI欠損・近似照合` を付ける。
 
+   **4a. クエリの書き方（予防）**：PubMed は引用符付きフレーズを「フレーズ辞書（phrase index）」に載っている場合だけ完全一致で検索する。載っていなければ引用符を無視して自動変換（Automatic Term Mapping）にかける。フィールド指定付きなら語を分割し、ハイフンを含むフレーズはヒットしない（PubMed User Guide）。このため次を守る。
+   - **既知の論文をタイトル句で探さない**。書誌情報があれば `lookup_article_by_citation`（雑誌・年・巻・頁・筆頭著者）、DOI/PMID があれば `convert_article_ids` / `get_article_metadata` で直接引く。
+   - **フレーズは近接検索で書く**：`"search recall"[tiab:~0]`（N=0 で隣接、語順不問。使えるのは Title・Title/Abstract・Affiliation のみ。ワイルドカード `*` とは併用不可）。辞書に載る一般的な言い回しか不明なときは近接検索を優先する。
+   - **語にはフィールド指定を付ける**（`[tiab]` `[ti]` `[mh]` 等）。自動変換で MeSH 等に読み替えられ、意図より広がるのを防ぐ。意図して自動変換を使う場合はそう宣言する。
+   - **Boolean 演算子は大文字**（`AND` `OR` `NOT`）。自然言語由来の小文字の not / and / or を引用符の外に裸で残さない（近接検索の引用符内では通常の語として検索される）。
+   - **フレーズ内のハイフン・コロン等の記号を避ける**（ハイフンは語を分けるか近接検索にする）。
+
+   **4b. 実際に検索された式の確認（保険）**：`search_articles` の返却値の `query_translation`（PubMed が実際に実行した式）を、毎回入力した式と照合する。
+   - 照合する点：語・フレーズの欠落、フィールド指定の変化（例：`[Title]` → `[All Fields]`）、フレーズの分割、演算子の消失、想定外の MeSH 展開。
+   - ずれがあれば、検索実施サマリにその式の「入力」と「実際」を並べ、何が変わったかを一言で書く。意図を損なうずれなら 4a に沿って書き直して再実行し、再実行後の式とヒット数を併記する。
+   - ずれがない場合は報告に何も足さない。
+   - ずれた式で得たヒット件数を「その切り口の文献の有無」の根拠にしない（0 件でも、意図した語が検索されていなければ「該当なし」とは言わない）。
+
 5. **`--exclude-zotero` 処理**（指定時のみ）：各 DOI を `mcp__zotero__zotero_search_items` または `zotero_advanced_search` で Zotero 所持と照合し、所持済みを結果から除外する。除外件数を報告に明記する。
 
 6. **seen.jsonl との突合と報告**：プロジェクトが存在する場合、`Read` で `workspace/<project>/seen.jsonl` を読み込み、DOI ごとに dedup（後勝ち）して既知集合を作る。今回の検索結果全件を、既出も含めて以下の形式で表示し、新規のみ視覚的にマークする。
@@ -32,7 +45,15 @@ tools: mcp__pubmed__search_articles, mcp__pubmed__get_article_metadata, mcp__pub
    - 実行したクエリを `query-log.jsonl` に `{"src":"pubmed","q":"...","ran":"YYYY-MM-DD"}` として同様の Read→Write で追記する。
    - `_scratch/` 実行時はこの2つの書き込みを行わず、その旨を報告に明記する。
 
-8. **検索実施サマリ・網羅性指標と隣接軸提案**：報告冒頭に AGENTS.md 報告規約の「検索実施サマリ」（クエリごとのヒット数・精読数・読んだ粒度・未スクリーニング集合）を置く。そのうえで新規÷総数の比率を「この軸の掘り尽くし度」として述べ、末尾に未探索の隣接軸を提案する。
+8. **検索実施サマリ・網羅性指標と隣接軸提案**：報告冒頭に AGENTS.md 報告規約の「検索実施サマリ」（クエリごとのヒット数・精読数・読んだ粒度・未スクリーニング集合）を置く。手順 4b でずれを検出した式は、入力と実際の式を並べて示す。
+
+   ```
+   - P2 入力：not yet ready for use[ti] AND systematic reviews[ti]
+        実際："yet"[All Fields] AND "ready for use"[Title] AND "systematic reviews"[Title]
+        ⚠ "not" が消失、"yet" が全フィールド化
+        → "not yet ready for use"[ti:~0] AND "systematic reviews"[ti] で再実行
+          実際："not yet ready for use"[Title:~0] AND "systematic reviews"[Title]（一致）：1 件 → 抄録確認
+   ```そのうえで新規÷総数の比率を「この軸の掘り尽くし度」として述べ、末尾に未探索の隣接軸を提案する。
 
    ```
    今回12件（新規2/既出10）。この軸はほぼ掘り尽くし。
