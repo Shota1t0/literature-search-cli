@@ -1,6 +1,6 @@
 ---
-description: Phase 1 — exhaustive precise search (PubMed) + adjacent discovery, new-vs-seen detection, adjacent-axis proposals
-argument-hint: "[project-name] [--source pubmed|s2] [--exclude-zotero] <query or natural-language intent>"
+description: Phase 1 — exhaustive precise search (PubMed; ClinicalTrials.gov for clinical topics) + adjacent discovery, new-vs-seen detection, adjacent-axis proposals
+argument-hint: "[project-name] [--source pubmed|clinicaltrials|s2] [--exclude-zotero] <query or natural-language intent>"
 context: fork
 agent: scout
 background: false

@@ -12,7 +12,7 @@ tools: Read, Write, Glob, Grep, Bash
 
 **手順**：
 1. **プロジェクト解決**：`$ARGUMENTS` の先頭トークンが既存プロジェクト名と一致すれば採用、なければ `Glob("workspace/*/seen.jsonl")`（mtime 降順）の先頭を採用。プロジェクトが無ければ「俯瞰する対象（seen 集合）が存在しない」旨を報告して終了する（`_scratch/` には俯瞰対象がない）。
-2. `workspace/<project>/seen.jsonl` を `Read` し、DOI で dedup（後勝ち）。DOI が null の行（近似照合のみ）は OpenAlex 照合の対象外として別枠で扱う。
+2. `workspace/<project>/seen.jsonl` を `Read` し、`"type": "trial"` の行（登録試験）を除いてから DOI で dedup（後勝ち）。試験は件数だけ別枠で報告する。DOI が null の行（近似照合のみ）は OpenAlex 照合の対象外として別枠で扱う。
 3. DOI を 50 件程度ずつバッチにし、`curl "https://api.openalex.org/works?filter=doi:D1|D2|...&mailto=<email>"` で OpenAlex 側の work（`primary_topic` / `concepts` / `cited_by_count` / `publication_year` 等）を取得する。**最初の1バッチのレスポンス構造を確認してから**残りのクエリを組み立てる（フィールド名がドキュメントと食い違う可能性があるため、実地確認を優先）。
 4. 分野俯瞰は `group_by=primary_topic.id`（現行の分類軸）を第一候補とし、空/エラーなら `group_by=concepts.id`（旧分類、後方互換）にフォールバックする。出版年分布は `group_by=publication_year`。例：
    `curl "https://api.openalex.org/works?filter=doi:D1|D2|...&group_by=primary_topic.id&mailto=<email>"`

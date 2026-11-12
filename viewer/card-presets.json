@@ -1,0 +1,58 @@
+{
+  "_note": "研究カードのひな形（AGENTS.md「研究カード規約」）。プロジェクトは view-config.json の card.preset で選び、slots / glance / by_kind で上書きできる。slot の id は英字で固定し、label だけを変える。",
+  "kinds": {
+    "original": "原著",
+    "review": "レビュー",
+    "guideline": "ガイドライン",
+    "method": "手法",
+    "data": "データ・資源",
+    "protocol": "プロトコル",
+    "other": "その他"
+  },
+  "presets": {
+    "clinical": {
+      "label": "臨床",
+      "slots": [
+        {"id": "design", "label": "デザイン"},
+        {"id": "population", "label": "対象・n"},
+        {"id": "followup", "label": "追跡"},
+        {"id": "exposure", "label": "曝露・介入"},
+        {"id": "outcome", "label": "評価項目"}
+      ],
+      "glance": ["design", "population", "followup"]
+    },
+    "basic": {
+      "label": "基礎・機序",
+      "slots": [
+        {"id": "system", "label": "系"},
+        {"id": "manipulation", "label": "操作"},
+        {"id": "readout", "label": "読み出し"},
+        {"id": "condition", "label": "条件"}
+      ],
+      "glance": ["system", "manipulation", "readout"]
+    },
+    "methods": {
+      "label": "方法論・計算",
+      "slots": [
+        {"id": "task", "label": "課題"},
+        {"id": "method", "label": "手法"},
+        {"id": "data", "label": "データ・評価指標"},
+        {"id": "baseline", "label": "比較対象"}
+      ],
+      "glance": ["task", "method", "data"]
+    },
+    "simulation": {
+      "label": "モデル・シミュレーション",
+      "slots": [
+        {"id": "model", "label": "モデル"},
+        {"id": "scale", "label": "スケール・パラメータ"},
+        {"id": "validation", "label": "検証データ"}
+      ],
+      "glance": ["model", "scale", "validation"]
+    }
+  },
+  "by_kind_default": {
+    "review": {"slots": [{"id": "scope", "label": "対象範囲"}], "glance": ["scope"]},
+    "guideline": {"slots": [{"id": "scope", "label": "対象範囲"}], "glance": ["scope"]}
+  }
+}

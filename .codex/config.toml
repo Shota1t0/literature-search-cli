@@ -12,3 +12,7 @@ url = "https://pubmed.mcp.claude.com/mcp"
 # 未認証の間、citation は Zotero MCP 同梱の Scite ツールに fallback する（.claude/agents/citation.md）。
 [mcp_servers.scite]
 url = "https://api.scite.ai/mcp"
+
+# ClinicalTrials.gov（scout が臨床テーマで登録試験を検索）。認証不要。
+[mcp_servers.clinicaltrials]
+url = "https://hcls.mcp.claude.com/clinical_trials/mcp"

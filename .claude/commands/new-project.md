@@ -29,4 +29,5 @@ allowed-tools: Write, Read, Glob
 ## 効かなかった／広すぎた軸
 ```
 
-4. 作成した 3 ファイルのパスを提示して完了を報告する。`landscape.md` の「目的」欄は空のままでよいが、ユーザーがこの場で目的を教えてくれた場合はテンプレートのコメント行を実際の目的文に置き換えてよい。
+4. ユーザーがこの場で目的を教えてくれた場合は、`landscape.md` の「目的」欄のコメント行を実際の目的文に置き換え、目的から研究カードのひな形（`viewer/card-presets.json` の `clinical` / `basic` / `methods` / `simulation`）を 1 つ選んで `workspace/<name>/view-config.json` に `{"card": {"preset": "<選んだひな形>"}}` を作る（AGENTS.md「研究カード規約」）。選んだ理由を一言添える。目的が無ければ作らない（最初にカードを書く scout が作る）。
+5. 作成したファイルのパスを提示して完了を報告する。

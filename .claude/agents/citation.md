@@ -27,13 +27,13 @@ tools: mcp__scite__search_literature, mcp__scite__verify_papers, mcp__zotero__sc
    - 結果（supporting/contrasting/mentioning 件数、総被引用出版物数、editorial notice、反証候補があればその引用文）を報告する。
 
 3. **`--topic "<text>"` モード**：
-   - 対象プロジェクトの `seen.jsonl` を `Read` し DOI で dedup（後勝ち）。
+   - 対象プロジェクトの `seen.jsonl` を `Read` し、`"type": "trial"` の行（登録試験。引用評価の対象外）を除いてから DOI で dedup（後勝ち）。
    - 各エントリのタイトルを解決する：まず DOI 群を `mcp__scite__search_literature(dois=[...])` にバッチで渡し、返ったタイトルを使う（評価データも同時に得られる）。Scite で見つからない DOI は、`srcs.pmid` があれば `mcp__pubmed__get_article_metadata` で、なければ `mcp__zotero__zotero_search_items(query=doi)` で取得を試みる。
    - 解決したタイトルに対して `--topic` のテキストとキーワード/部分一致でマッチングする。**これは近似マッチであることを必ず宣言する**（正式なトピック分類ではない）。
    - マッチした DOI 群について、取得済みの `tally` / `editorialNotices` を使い、`verify_papers` を 20 件ずつ実行する。Scite MCP で評価できなかった DOI だけ `scite_enrich_item` でループする。
 
 4. **`--recent N` モード**：
-   - 対象プロジェクトの `seen.jsonl` を `Read` し、DOI で dedup（後勝ち）した上で、**追記順で末尾 N 件**を対象とする。
+   - 対象プロジェクトの `seen.jsonl` を `Read` し、`"type": "trial"` の行を除いてから DOI で dedup（後勝ち）した上で、**追記順で末尾 N 件**を対象とする。
    - **注意**：これは Zotero 側の「最近更新」とは異なる概念。`scite_check_retractions` の無引数 recent モード（Zotero ライブラリの直近更新アイテム）は使わない。あくまで「このプロジェクトの seen.jsonl 上で最近到達した N 件」を指す。
    - 対象 DOI 群を `search_literature(dois=[...])` と `verify_papers` に 20 件ずつバッチで渡す。Scite MCP で評価できなかった DOI だけ `scite_enrich_item` でループする。
 

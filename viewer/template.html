@@ -1,0 +1,738 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文献調査ビュー</title>
+<!--
+  文献調査ビューの共通テンプレート（tools/build_view.py がデータを埋め込んで
+  workspace/<project>/view.html を作る）。プロジェクトごとに書き換えない。
+  表示の段：L0 一覧の 1 行 → L1 行をクリックしてその場で展開 → L2 右の詳細欄（節は閉じて置く）→ L3 原典へのリンク。
+  印は「普通と違うとき」だけ付ける（本文確認・保留・除外・矛盾・提案中など）。
+-->
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --faint: #9a9993; --line: #e3e2dd;
+  --accent: #2f5fb3; --accent-soft: #e8eefa;
+  --ok: #2e7d4f; --ok-soft: #e4f3ea; --warn: #a3620a; --warn-soft: #fbf0dc;
+  --bad: #b03a2e; --bad-soft: #f8e3e0; --off: #77766f; --off-soft: #eeeeea; --code: #f1f0ec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #a09f99; --faint: #7a7973; --line: #34332f;
+    --accent: #8fb0f0; --accent-soft: #24304a;
+    --ok: #7cc79a; --ok-soft: #1f3328; --warn: #e3b061; --warn-soft: #3a2e1a;
+    --bad: #ec8c80; --bad-soft: #3d2320; --off: #a3a29c; --off-soft: #2a2a27; --code: #2a2a27;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #a09f99; --faint: #7a7973; --line: #34332f;
+  --accent: #8fb0f0; --accent-soft: #24304a;
+  --ok: #7cc79a; --ok-soft: #1f3328; --warn: #e3b061; --warn-soft: #3a2e1a;
+  --bad: #ec8c80; --bad-soft: #3d2320; --off: #a3a29c; --off-soft: #2a2a27; --code: #2a2a27;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); overflow-x: hidden;
+  font: 14px/1.6 "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, select, input { font: inherit; color: inherit; }
+.mono, code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+/* header */
+header { padding: 12px 20px 0; border-bottom: 1px solid var(--line); background: var(--panel); }
+.title-row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+h1 { font-size: 17px; margin: 0; }
+.sub { color: var(--muted); font-size: 12.5px; }
+.head-tools { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+header details { margin: 4px 0 0; font-size: 13px; }
+header summary { cursor: pointer; color: var(--muted); }
+.purpose-body { white-space: pre-wrap; padding: 4px 0; max-width: 900px; }
+.warns ul { margin: 4px 0; padding-left: 20px; color: var(--warn); font-size: 12.5px; }
+nav.tabs { display: flex; gap: 2px; margin-top: 8px; overflow-x: auto; }
+nav.tabs button { border: 0; background: none; padding: 7px 14px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+nav.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+nav.tabs .n { font-size: 11.5px; color: var(--faint); margin-left: 4px; font-weight: 400; }
+/* layout */
+main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); min-height: calc(100vh - 110px); }
+#list { padding: 14px 20px 48px; min-width: 0; }
+#detail { border-left: 1px solid var(--line); background: var(--panel); padding: 14px 18px 48px; position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; min-width: 0; }
+@media (max-width: 900px) {
+  main { grid-template-columns: minmax(0, 1fr); }
+  #detail { position: static; max-height: none; border-left: 0; border-top: 1px solid var(--line); }
+  header, #list, #detail { padding-left: 16px; padding-right: 16px; }
+  .head-tools { margin-left: 0; }
+}
+/* toolbar */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.toolbar > * { min-width: 0; max-width: 100%; }
+.toolbar input[type=search] { flex: 1 1 200px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.toolbar select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.toolbar details { position: relative; }
+.toolbar details > summary { list-style: none; cursor: pointer; padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-size: 13px; }
+.toolbar details > summary::-webkit-details-marker { display: none; }
+.toolbar details[open] > summary { border-color: var(--accent); }
+.morebox { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.count { color: var(--muted); font-size: 12.5px; }
+.empty { color: var(--muted); padding: 24px 4px; }
+/* rows (L0 / L1) */
+.row { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; min-width: 0; }
+.row > .l0 { padding: 8px 12px; cursor: pointer; display: flex; gap: 10px; align-items: baseline; }
+.row:hover { border-color: var(--accent); }
+.row.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.row.dim { opacity: .6; }
+.l0 .main { flex: 1 1 auto; min-width: 0; }
+.l0 .lead { font-weight: 600; }
+.l0 .who { color: var(--muted); font-size: 12.5px; white-space: nowrap; margin-right: 6px; }
+.l0 .line { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.l0 .hl { color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.l0 .hl::before { content: "→ "; color: var(--faint); }
+.l0 .marks { flex: none; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 45%; }
+.caret { flex: none; color: var(--faint); font-size: 11px; width: 10px; }
+.row.open .caret { transform: rotate(90deg); }
+.l1 { border-top: 1px dashed var(--line); padding: 8px 12px 10px 32px; font-size: 13px; }
+.qid { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--muted); font-weight: 600; flex: none; }
+.children { margin-left: 18px; padding-left: 10px; border-left: 2px solid var(--line); }
+.chip { display: inline-block; font-size: 11.5px; line-height: 1.55; padding: 0 7px; border-radius: 999px; background: var(--off-soft); color: var(--off); white-space: nowrap; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+.chip.acc { background: var(--accent-soft); color: var(--accent); }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12.5px; }
+.btn:hover, .btn.on { border-color: var(--accent); color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 2px 9px; cursor: pointer; font-size: 12.5px; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.note { color: var(--muted); font-size: 12.5px; }
+.facts { color: var(--muted); }
+.facts b { color: var(--ink); font-weight: 500; }
+.caveat { color: var(--warn); font-size: 12.5px; margin-top: 2px; }
+.caveat::before { content: "注意："; }
+/* evidence table (L1 of a question) */
+table.ev { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.ev th { text-align: left; color: var(--muted); font-weight: 500; padding: 2px 6px; white-space: nowrap; }
+table.ev td { padding: 4px 6px; border-top: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+table.ev tr.p { cursor: pointer; }
+table.ev tr.p:hover td { background: var(--accent-soft); }
+table.ev td.who { white-space: nowrap; font-weight: 500; }
+@media (max-width: 640px) {
+  table.ev thead { display: none; }
+  table.ev tr { display: block; border-top: 1px solid var(--line); padding: 4px 0; }
+  table.ev td { display: inline; border: 0; padding: 0 4px 0 0; }
+  table.ev td.claim { display: block; padding-top: 1px; }
+  table.ev td.slot:not(:empty)::before { content: "· "; color: var(--faint); }
+}
+table.qt { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+table.qt td, table.qt th { text-align: left; padding: 2px 6px; border-top: 1px solid var(--line); overflow-wrap: anywhere; vertical-align: top; }
+table.qt th { color: var(--muted); font-weight: 500; }
+table.qt .num { text-align: right; white-space: nowrap; }
+table.qt col.c-id { width: 16%; } table.qt col.c-n { width: 12%; } table.qt col.c-s { width: 18%; }
+.datehead { font-size: 12.5px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+.gapbox { background: var(--warn-soft); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+.gap { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; padding: 3px 0; }
+.gap .txt { flex: 1 1 240px; min-width: 0; }
+/* detail (L2) */
+#detail h2 { font-size: 16px; margin: 2px 0 4px; line-height: 1.45; }
+#detail .back { font-size: 12.5px; }
+#detail .kicker { font-size: 12px; color: var(--muted); }
+#detail .headline { font-weight: 600; margin: 8px 0 4px; }
+#detail details.sec { border-top: 1px solid var(--line); padding: 6px 0; }
+#detail details.sec > summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; padding: 2px 0; }
+#detail details.sec > summary .n { font-weight: 400; color: var(--faint); margin-left: 4px; }
+#detail details.sec[open] > summary { color: var(--ink); margin-bottom: 4px; }
+.card { background: var(--bg); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.card .claim { font-weight: 600; }
+.kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 10px; font-size: 13px; margin-top: 6px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.answer, .abstract { white-space: pre-wrap; font-size: 13px; }
+.point { border-left: 3px solid var(--line); padding: 1px 0 1px 10px; margin: 8px 0; font-size: 13px; }
+.refs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.ref { font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; cursor: pointer; background: var(--panel); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ref:hover { border-color: var(--accent); }
+ul.plain { margin: 2px 0; padding-left: 18px; font-size: 13px; }
+ul.plain li { margin: 2px 0; }
+.missing li { color: var(--warn); }
+.req { display: flex; gap: 6px; align-items: flex-start; margin: 4px 0 8px; }
+.req code { flex: 1; background: var(--code); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; display: block; }
+.req .btn { flex: none; }
+.qcode { background: var(--code); border-radius: 6px; padding: 5px 8px; white-space: pre-wrap; overflow-wrap: anywhere; display: block; margin: 3px 0; }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 6px 14px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="title-row">
+    <h1 id="h-project"></h1>
+    <span class="sub" id="h-stats"></span>
+    <span class="head-tools"><span class="sub">依頼文</span>
+      <span class="seg" id="prefix-seg"><button data-p="/" title="Claude Code のコマンド">/ Claude</button><button data-p="$" title="Codex の skill">$ Codex</button></span>
+    </span>
+  </div>
+  <details id="h-purpose"><summary>目的（landscape.md）</summary><div class="purpose-body"></div></details>
+  <details class="warns" id="h-warns" hidden><summary></summary><ul></ul></details>
+  <nav class="tabs" id="tabs">
+    <button data-tab="questions">問いと答え<span class="n" id="n-questions"></span></button>
+    <button data-tab="papers">文献<span class="n" id="n-papers"></span></button>
+    <button data-tab="runs">検索履歴<span class="n" id="n-runs"></span></button>
+  </nav>
+</header>
+<main>
+  <section id="list"></section>
+  <aside id="detail"></aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script id="view-data" type="application/json">__VIEW_DATA__</script>
+<script>
+"use strict";
+const D = JSON.parse(document.getElementById("view-data").textContent);
+const P = new Map(D.papers.map(p => [p.key, p]));
+const R = new Map(D.runs.map(r => [r.run, r]));
+const Q = new Map(D.questions.map(q => [q.q, q]));
+const CARD = D.card || { slots: [], glance: [], by_kind: {}, kinds: {}, labels: {} };
+
+const DEPTH = { fulltext: "本文", abstract: "抄録", title: "題名" };
+const DECISION = { adopt: "採用", hold: "保留", exclude: "除外", title_only: "題名のみ" };
+const STATUS = { active: "進行中", answered: "回答済み", parked: "保留", merged: "統合", dropped: "中止" };
+const REASON = { off_topic: "対象外", design: "設計が不一致", duplicate: "重複", later: "保留", other: "その他" };
+const PAGE = 150;
+
+// ------------------------------------------------------------ 小道具
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const $ = sel => document.querySelector(sel);
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+function chip(text, cls = "") { return `<span class="chip ${cls}">${esc(text)}</span>`; }
+function trunc(s, n) { s = String(s ?? ""); return s.length > n ? s.slice(0, n) + "…" : s; }
+function n(x) { return Array.isArray(x) ? x.length : 0; }
+function authorsOf(p) { const a = p.bib.authors; return Array.isArray(a) ? a : (typeof a === "string" && a ? a.split(/\s*;\s*/) : []); }
+function firstAuthor(p) {
+  if (p.bib.first_author) return p.bib.first_author;
+  const a = authorsOf(p)[0]; if (!a) return "";
+  return a.includes(",") ? a.split(",")[0] : a.trim().split(/\s+/).pop();
+}
+function idOf(p) { return p.key.replace(/^(doi|nct|pmid|title):/, ""); }
+function who(p) { if (!p) return "?"; if (p.trial) return idOf(p); const s = [firstAuthor(p), p.bib.year].filter(Boolean).join(" "); return s || idOf(p); }
+function shortRef(p) { return p ? who(p) + (p.bib.title ? " " + trunc(p.bib.title, 40) : "") : "?"; }
+function queryOf(run, id) { return (run && run.queries || []).find(q => q.id === id); }
+function queryLabel(run, id) { const q = queryOf(run, id); return q ? (q.label || trunc(q.q, 60)) : id; }
+function kindLabel(k) { return CARD.kinds[k] || k || ""; }
+function slotLabel(id) { return CARD.labels[id] || id; }
+function glanceOf(p) {
+  const k = p.card?.kind; const bk = k && CARD.by_kind[k];
+  return (bk && bk.glance) || CARD.glance || [];
+}
+function slotsOf(p) {
+  const k = p.card?.kind; const bk = k && CARD.by_kind[k];
+  const ids = [...((bk && bk.slots) || CARD.slots || []).map(s => s.id)];
+  for (const id of Object.keys(p.card?.slots || {})) if (!ids.includes(id)) ids.push(id);
+  return ids.filter(id => p.card?.slots?.[id]);
+}
+function glanceText(p) { return glanceOf(p).map(id => p.card?.slots?.[id]).filter(Boolean).join(" · "); }
+
+// ------------------------------------------------------------ 状態と URL
+let prefix = store("lsv-prefix") === "$" ? "$" : "/";
+const state = { tab: "questions", sel: null, open: new Set(), qMode: "focus", qText: "", pText: "", pKind: "paper", pQ: "", pDec: "", pDepth: "", pUse: "", pOrigin: "", pSort: "rec", pLimit: PAGE, rText: "", rCmd: "", showGaps: false, showLegacy: false };
+
+function readHash() { const h = new URLSearchParams(location.hash.slice(1)); if (h.get("tab")) state.tab = h.get("tab"); state.sel = h.get("sel") || null; state.pQ = h.get("q") || ""; }
+function writeHash(push) {
+  const h = new URLSearchParams(); h.set("tab", state.tab); if (state.tab === "papers" && state.pQ) h.set("q", state.pQ); if (state.sel) h.set("sel", state.sel);
+  const url = "#" + h.toString(); if (push) history.pushState(null, "", url); else history.replaceState(null, "", url);
+}
+function select(sel) { state.sel = sel; writeHash(true); renderDetail(); markSelected(); }
+function setTab(tab) { state.tab = tab; writeHash(true); renderAll(); }
+window.addEventListener("popstate", () => { readHash(); renderAll(); });
+
+// ------------------------------------------------------------ 依頼文
+function req(cmd, text) { return `${prefix}${cmd} ${D.project} ${text}`; }
+function reqSection(items) {
+  if (!items.length) return "";
+  return sec("CLI への依頼文", items.length, items.map(([label, text]) =>
+    `<div class="note">${esc(label)}</div><div class="req"><code>${esc(text)}</code><button class="btn" data-copy="${esc(text)}">コピー</button></div>`).join(""));
+}
+async function copy(text) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e2) { ok = false; } ta.remove();
+  }
+  const t = $("#toast"); t.textContent = ok ? "コピーしました" : "コピーできませんでした"; t.classList.add("on");
+  setTimeout(() => t.classList.remove("on"), 1300);
+}
+document.addEventListener("click", e => {
+  const c = e.target.closest("[data-copy]"); if (c) { e.stopPropagation(); copy(c.dataset.copy); return; }
+  const f = e.target.closest("[data-filterq]");
+  if (f) { e.preventDefault(); e.stopPropagation(); state.pQ = f.dataset.filterq; state.pDec = f.dataset.dec || ""; state.pLimit = PAGE; state.tab = "papers"; writeHash(true); renderAll(); window.scrollTo(0, 0); return; }
+  const s = e.target.closest("[data-sel]"); if (s) { e.preventDefault(); e.stopPropagation(); select(s.dataset.sel); return; }
+  const t = e.target.closest("[data-toggle]");
+  if (t) {
+    const k = t.dataset.toggle;
+    if (state.open.has(k)) state.open.delete(k); else state.open.add(k);
+    const row = t.closest(".row"); if (row) { row.outerHTML = rowFor(k); }
+    if (state.sel !== k) select(k); else markSelected();
+  }
+});
+function rowFor(k) {
+  const i = k.indexOf(":"), type = k.slice(0, i), id = k.slice(i + 1);
+  if (type === "q") return qRow(Q.get(id), false);
+  if (type === "p") return paperRow(P.get(id));
+  if (type === "r") return runRow(R.get(id));
+  return "";
+}
+function sec(title, count, body, open = false) {
+  return `<details class="sec" ${open ? "open" : ""}><summary>${esc(title)}${count !== null && count !== undefined ? `<span class="n">${esc(count)}</span>` : ""}</summary>${body}</details>`;
+}
+
+// ------------------------------------------------------------ 問いと答え
+function qDesc(qid) {
+  const out = new Set(), stack = [qid];
+  while (stack.length) { const id = stack.pop(); if (out.has(id)) continue; out.add(id); for (const c of Q.get(id)?.children || []) stack.push(c); }
+  return out;
+}
+function relatedPapers(qid) {
+  const ids = qDesc(qid);
+  return D.papers.filter(p => (p.qs || []).some(x => ids.has(x)));
+}
+function relatedLink(q) {
+  const rel = relatedPapers(q.q), main = rel.filter(p => !p.title_only).length, t = rel.length - main;
+  if (!rel.length) return `<div class="note" style="margin-top:6px">この問いに紐づけた文献はまだありません。</div>`;
+  return `<div style="margin-top:6px;font-size:13px"><a href="#" data-filterq="${esc(q.q)}">関連文献 ${main} 件をすべて見る →</a>${t ? ` <a href="#" class="note" data-filterq="${esc(q.q)}" data-dec="title_only">ほか題名のみ ${t} 件</a>` : ""}${(q.children || []).length ? ` <span class="note">（下位の問いを含む）</span>` : ""}</div>`;
+}
+function qMatches(q, t) {
+  if (!t) return true;
+  return [q.q, q.question, q.headline, q.answer, ...(q.open || []), ...(q.points || []).map(p => p.text)].join(" ").toLowerCase().includes(t);
+}
+function qMarks(q) {
+  const m = [];
+  if (q.status !== "active") m.push(chip(STATUS[q.status] || q.status, q.status === "answered" ? "ok" : ""));
+  if (q.proposed) m.push(chip("提案中", "warn"));
+  if (n(q.conflicts)) m.push(chip("矛盾あり", "bad"));
+  if (q.pinned) m.push(chip("ピン", "acc"));
+  return m.join("");
+}
+function renderQuestions() {
+  const t = state.qText.trim().toLowerCase(), all = D.questions;
+  let h = `<div class="toolbar"><input type="search" id="q-text" placeholder="問い・答え・根拠を検索" value="${esc(state.qText)}">
+    <select id="q-mode"><option value="focus">進行中・ピン・提案中</option><option value="all">すべて</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}のみ</option>`).join("")}</select>
+    <span class="count" id="q-count"></span></div>`;
+  if (!all.length) return h + `<div class="empty">問いはまだ記録されていません。/scout などの実行後に <code>findings/</code> に書かれます。過去の調査は /view --restore で報告書から復元できます。</div>`;
+  const shown = new Set();
+  for (const q of all) {
+    const ok = state.qMode === "all" || (state.qMode === "focus" ? (q.status === "active" || q.pinned || q.proposed) : q.status === state.qMode);
+    if (ok && qMatches(q, t)) shown.add(q.q);
+  }
+  const ctx = new Set();
+  for (const id of shown) { let p = Q.get(id)?.parent; const g = new Set(); while (p && Q.has(p) && !g.has(p)) { g.add(p); if (!shown.has(p)) ctx.add(p); p = Q.get(p).parent; } }
+  const visit = (q, g) => {
+    if (g.has(q.q)) return ""; g.add(q.q);
+    const kids = (q.children || []).map(id => Q.get(id)).filter(Boolean).map(k => visit(k, g)).join("");
+    if (!shown.has(q.q) && !ctx.has(q.q)) return kids;
+    return qRow(q, !shown.has(q.q)) + (kids ? `<div class="children">${kids}</div>` : "");
+  };
+  const body = all.filter(q => !q.parent || !Q.has(q.parent)).map(r => visit(r, new Set())).join("") || `<div class="empty">条件に合う問いはありません。</div>`;
+  const hidden = all.length - shown.size;
+  h = h.replace(`<span class="count" id="q-count"></span>`, `<span class="count">表示 ${shown.size} / 全 ${all.length}</span>`);
+  return h + body + (hidden > 0 && state.qMode !== "all" ? `<div style="margin:10px 0"><button class="btn" id="q-showall">表示していない ${hidden} 件も表示</button></div>` : "");
+}
+function qRow(q, dim) {
+  const k = "q:" + q.q, open = state.open.has(k);
+  const hl = q.headline || (q.answer ? trunc(q.answer, 60) : "");
+  return `<div class="row ${dim ? "dim" : ""} ${open ? "open" : ""}" data-key="${esc(k)}">
+    <div class="l0" data-toggle="${esc(k)}"><span class="caret">▶</span><span class="qid">${esc(q.q)}</span>
+      <div class="main"><div class="line">${esc(q.question || "（問いの文なし）")}</div>${hl ? `<div class="hl">${esc(hl)}</div>` : ""}</div>
+      <span class="marks">${qMarks(q)}</span></div>
+    ${open ? `<div class="l1">${qL1(q)}</div>` : ""}</div>`;
+}
+function evidenceRows(q) {
+  const rows = [];
+  for (const pt of q.points || []) for (const k of pt.keys || []) rows.push({ p: P.get(k), k, text: pt.text });
+  return rows;
+}
+function qL1(q) {
+  const rows = evidenceRows(q);
+  let h = "";
+  if (rows.length) {
+    const cols = CARD.glance || [];
+    h += `<table class="ev"><thead><tr><th>研究</th>${cols.map(c => `<th>${esc(slotLabel(c))}</th>`).join("")}<th>示したこと</th></tr></thead><tbody>${rows.map(({ p, k, text }) => {
+      const sl = p?.card?.slots || {};
+      const bk = p?.card?.kind && CARD.by_kind[p.card.kind];
+      const cells = bk ? [ (bk.glance || []).map(id => sl[id]).filter(Boolean).join(" · "), ...cols.slice(1).map(() => "") ] : cols.map(c => sl[c] || "");
+      return `<tr class="p" data-sel="p:${esc(k)}"><td class="who">${esc(who(p))}</td>${cells.map(c => `<td class="slot">${esc(c)}</td>`).join("")}<td class="claim">${esc(text)}</td></tr>`;
+    }).join("")}</tbody></table>`;
+  }
+  const kids = (q.children || []).map(id => Q.get(id)).filter(Boolean);
+  if (kids.length && !rows.length) {
+    h += `<ul class="plain">${kids.map(c => `<li><a href="#" data-sel="q:${esc(c.q)}">${esc(c.q)}</a> ${esc(c.question || "")}${c.headline ? `<div class="note">→ ${esc(c.headline)}</div>` : ""}</li>`).join("")}</ul>`;
+  }
+  if (!h) h = `<div class="note">根拠はまだ記録されていません。</div>`;
+  return h + relatedLink(q);
+}
+function bindQuestions() {
+  const t = $("#q-text"); if (!t) return;
+  t.addEventListener("input", debounce(() => { state.qText = t.value; renderList(); refocus("#q-text"); }, 200));
+  const m = $("#q-mode"); m.value = state.qMode; m.addEventListener("change", () => { state.qMode = m.value; renderList(); });
+  const s = $("#q-showall"); if (s) s.addEventListener("click", () => { state.qMode = "all"; renderList(); });
+}
+function detailQuestion(q) {
+  const parent = q.parent && Q.get(q.parent), kids = (q.children || []).map(id => Q.get(id)).filter(Boolean);
+  let h = `<div class="kicker">${esc(q.q)}${parent ? ` · <a href="#" data-sel="q:${esc(parent.q)}">${esc(parent.q)} の下位</a>` : ""}</div>
+    <h2>${esc(q.question || "")}</h2><div>${chip(STATUS[q.status] || q.status, q.status === "active" ? "acc" : "")} ${qMarks(q).replace(chip(STATUS[q.status] || q.status, q.status === "answered" ? "ok" : ""), "")}</div>
+    ${q.headline ? `<div class="headline">${esc(q.headline)}</div>` : ""}`;
+  h += sec("答え", null, q.answer ? `<div class="answer">${esc(q.answer)}</div>` : `<div class="note">まだ答えはありません。</div>`, true);
+  if (n(q.points)) h += sec("根拠（主張ごと）", q.points.length, q.points.map(pt => {
+    const refs = (pt.keys || []).map(k => { const p = P.get(k); return `<span class="ref" data-sel="p:${esc(k)}" title="${esc(p?.bib?.title || k)}">${esc(who(p))}${p?.depth === "fulltext" ? " · 本文" : ""}</span>`; }).join("");
+    return `<div class="point">${esc(pt.text)}<div class="refs">${refs}</div></div>`;
+  }).join(""));
+  if (n(q.conflicts)) h += sec("矛盾・対立", q.conflicts.length, `<ul class="plain">${q.conflicts.map(c => `<li>${esc(c)}</li>`).join("")}</ul>`, true);
+  if (n(q.open)) h += sec("未解決", q.open.length, `<ul class="plain missing">${q.open.map(c => `<li>${esc(c)}</li>`).join("")}</ul>`);
+  const rel = relatedPapers(q.q).filter(p => !p.title_only);
+  if (rel.length) {
+    const ev = new Set((q.points || []).flatMap(pt => pt.keys || []));
+    rel.sort((a, b) => (ev.has(b.key) - ev.has(a.key)) || (b.card ? 1 : 0) - (a.card ? 1 : 0));
+    h += sec("関連文献", rel.length, `<ul class="plain">${rel.map(p => `<li><a href="#" data-sel="p:${esc(p.key)}">${esc(who(p))}</a>${ev.has(p.key) ? " " + chip("根拠", "acc") : ""} <span class="note">${esc(trunc(p.card?.claim || p.bib.title || "", 70))}</span></li>`).join("")}</ul>
+      <div style="margin-top:4px"><a href="#" data-filterq="${esc(q.q)}">文献タブでこの問いに絞る →</a></div>`);
+  }
+  if (kids.length) h += sec("下位の問い", kids.length, `<ul class="plain">${kids.map(k => `<li><a href="#" data-sel="q:${esc(k.q)}">${esc(k.q)}</a> ${esc(k.question || "")}${k.headline ? `<div class="note">→ ${esc(k.headline)}</div>` : ""}</li>`).join("")}</ul>`);
+  const meta = [];
+  if (q.purpose) meta.push(`<dt>目的との関係</dt><dd>${esc(q.purpose)}</dd>`);
+  if (q.merged_into) meta.push(`<dt>統合先</dt><dd><a href="#" data-sel="q:${esc(q.merged_into)}">${esc(q.merged_into)}</a></dd>`);
+  meta.push(`<dt>作成・更新</dt><dd>${esc(q.created || "")} → ${esc(q.updated || "")}</dd>`);
+  h += sec("問いの情報", null, `<dl class="kv">${meta.join("")}</dl>`);
+  if ((q.history || []).length > 1) h += sec("変更履歴", q.history.length, `<ul class="plain">${q.history.slice().reverse().map(v => `<li>${esc(v.date)} <a href="#" data-sel="r:${esc(v.run)}">${esc(v.run)}</a> ${v.status ? chip(STATUS[v.status] || v.status) : ""}${v.headline || v.answer ? `<div class="note">${esc(v.headline || trunc(v.answer, 80))}</div>` : ""}</li>`).join("")}</ul>`);
+  const runs = (q.runs || []).filter(id => R.has(id));
+  if (runs.length) h += sec("関わった実行", runs.length, `<ul class="plain">${runs.map(id => `<li><a href="#" data-sel="r:${esc(id)}">${esc(id)}</a> <span class="note">${esc(trunc(R.get(id).ask || "", 60))}</span></li>`).join("")}</ul>`);
+  h += extrasSec(q.extra);
+  const dois = [...new Set((q.points || []).flatMap(pt => pt.keys || []).filter(k => k.startsWith("doi:")).map(k => k.slice(4)))];
+  const items = [["未解決点を補う検索", req("scout", `${q.q}「${q.question || ""}」の続き。${n(q.open) ? "未解決：" + q.open.join("／") + "。" : ""}前回の findings と runs を踏まえて検索`)]];
+  if (dois.length) items.push(["根拠を本文で確認して答えを更新", req("digest", `${q.q} の根拠論文を本文で確認し、答えを更新：${dois.join(" ")}`)]);
+  if (dois.length) items.push(["根拠への支持・反論・撤回を確認", req("ask", `${q.q} の根拠論文の支持・反論と撤回を確認：${dois.join(" ")}`)]);
+  return h + reqSection(items);
+}
+
+// ------------------------------------------------------------ 文献
+function origin(p) { return p.occ.some(o => !(R.get(o.run) || {}).legacy) ? "run" : "legacy"; }
+function decisionOf(p) { return p.title_only ? "title_only" : p.decision; }
+function filteredPapers() {
+  const t = state.pText.trim().toLowerCase();
+  const qIds = state.pQ && state.pQ !== "none" ? qDesc(state.pQ) : new Set();
+  const list = D.papers.filter(p => {
+    if (state.pKind === "paper" && p.trial) return false;
+    if (state.pKind === "trial" && !p.trial) return false;
+    if (state.pQ === "none") { if ((p.qs || []).length) return false; }
+    else if (state.pQ && !(p.qs || []).some(x => qIds.has(x))) return false;
+    const d = decisionOf(p);
+    if (state.pDec === "") { if (d === "title_only") return false; }
+    else if (state.pDec === "none") { if (d) return false; }
+    else if (d !== state.pDec) return false;
+    if (state.pDepth === "none" ? p.depth : state.pDepth && p.depth !== state.pDepth) return false;
+    if (state.pUse === "used" && !p.used_in.length) return false;
+    if (state.pUse === "unused" && p.used_in.length) return false;
+    if (state.pUse === "card" && !p.card) return false;
+    if (state.pOrigin && origin(p) !== state.pOrigin) return false;
+    if (t) {
+      const hay = [p.key, p.bib.title, authorsOf(p).join(" "), p.bib.journal, p.why, p.bib.year, p.card?.claim, p.card?.caveat, ...Object.values(p.card?.slots || {})].join(" ").toLowerCase();
+      if (!hay.includes(t)) return false;
+    }
+    return true;
+  });
+  const date = p => String(p.seen || p.occ.at(-1)?.date || "");
+  const score = p => (p.used_in.length ? 4 : 0) + (p.card ? 2 : 0) + (p.decision === "adopt" ? 1 : 0);
+  const by = state.pSort;
+  list.sort((a, b) => by === "year" ? (b.bib.year || 0) - (a.bib.year || 0)
+    : by === "title" ? (a.bib.title || "~").localeCompare(b.bib.title || "~")
+    : by === "seen" ? date(b).localeCompare(date(a))
+    : score(b) - score(a) || date(b).localeCompare(date(a)));
+  return list;
+}
+function renderPapers() {
+  const list = filteredPapers();
+  const opt = (v, l, cur) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`;
+  const nTitle = D.stats.title_only || 0;
+  const moreActive = state.pDepth || state.pUse || state.pOrigin || state.pSort !== "rec";
+  let h = `<div class="toolbar">
+    <input type="search" id="p-text" placeholder="題名・著者・内容で検索" value="${esc(state.pText)}">
+    ${D.questions.length ? `<select id="p-q">${opt("", "問い：すべて", state.pQ)}${qOptions(opt)}${opt("none", "問いに未紐づけ", state.pQ)}</select>` : ""}
+    <select id="p-kind">${opt("paper", "論文", state.pKind)}${opt("trial", "登録試験", state.pKind)}${opt("all", "論文＋試験", state.pKind)}</select>
+    <select id="p-dec">${opt("", "判断：題名のみを除く", state.pDec)}${opt("adopt", "採用", state.pDec)}${opt("hold", "保留", state.pDec)}${opt("exclude", "除外", state.pDec)}${opt("none", "判断の記録なし", state.pDec)}${nTitle ? opt("title_only", `題名だけ見た候補（${nTitle}）`, state.pDec) : ""}</select>
+    <details id="p-more" ${moreActive ? "open" : ""}><summary>その他の条件${moreActive ? " ●" : ""}</summary><div class="morebox">
+      <select id="p-use">${opt("", "内容：すべて", state.pUse)}${opt("card", "カードあり", state.pUse)}${opt("used", "答えの根拠に使用", state.pUse)}${opt("unused", "根拠に未使用", state.pUse)}</select>
+      <select id="p-depth">${opt("", "確認の深さ：すべて", state.pDepth)}${opt("fulltext", "本文", state.pDepth)}${opt("abstract", "抄録", state.pDepth)}${opt("title", "題名", state.pDepth)}${opt("none", "記録なし", state.pDepth)}</select>
+      <select id="p-origin">${opt("", "経路：すべて", state.pOrigin)}${opt("run", "実行記録あり", state.pOrigin)}${opt("legacy", "経路不明（記録なし）", state.pOrigin)}</select>
+      <select id="p-sort">${opt("rec", "並び：根拠・カードを先に", state.pSort)}${opt("seen", "到達日", state.pSort)}${opt("year", "出版年", state.pSort)}${opt("title", "題名", state.pSort)}</select>
+    </div></details>
+    <span class="count">${list.length} 件</span></div>`;
+  if (!list.length) return h + `<div class="empty">条件に合う文献はありません。</div>`;
+  h += list.slice(0, state.pLimit).map(paperRow).join("");
+  if (list.length > state.pLimit) h += `<div style="margin:10px 0"><button class="btn" id="p-more-rows">さらに表示（残り ${list.length - state.pLimit}）</button></div>`;
+  return h;
+}
+function qOptions(opt) {
+  const out = [], depthOf = q => { let d = 0, p = q.parent; const g = new Set(); while (p && Q.has(p) && !g.has(p)) { g.add(p); d++; p = Q.get(p).parent; } return d; };
+  const visit = (q, g) => { if (g.has(q.q)) return; g.add(q.q); out.push(opt(q.q, `${"　".repeat(depthOf(q))}${q.q} ${trunc(q.question || "", 24)}`, state.pQ)); for (const c of q.children || []) if (Q.has(c)) visit(Q.get(c), g); };
+  const g = new Set(); D.questions.filter(q => !q.parent || !Q.has(q.parent)).forEach(q => visit(q, g));
+  return out.join("");
+}
+function paperMarks(p) {
+  const m = [];
+  const d = decisionOf(p);
+  if (d === "hold") m.push(chip("保留", "warn"));
+  if (d === "exclude") m.push(chip("除外", "bad"));
+  if (d === "title_only") m.push(chip("題名のみ"));
+  if (p.depth === "fulltext") m.push(chip("本文", "ok"));
+  const qs = [...new Set(p.used_in.map(u => u.q))];
+  if (qs.length) m.push(chip("根拠 " + qs.join(","), "acc"));
+  return m.join("");
+}
+function paperRow(p) {
+  const k = "p:" + p.key, open = state.open.has(k);
+  const line = p.card?.claim || p.bib.title || idOf(p);
+  return `<div class="row ${open ? "open" : ""}" data-key="${esc(k)}">
+    <div class="l0" data-toggle="${esc(k)}"><span class="caret">▶</span>
+      <div class="main"><div class="line"><span class="who">${esc(who(p))}</span>${p.card?.claim ? esc(line) : `<span class="${p.bib.title ? "" : "note"}">${esc(line)}</span>`}</div></div>
+      <span class="marks">${paperMarks(p)}</span></div>
+    ${open ? `<div class="l1">${paperL1(p)}</div>` : ""}</div>`;
+}
+function paperL1(p) {
+  let h = "";
+  if (p.card) {
+    const facts = [kindLabel(p.card.kind), ...slotsOf(p).map(id => p.card.slots[id])].filter(Boolean);
+    h += `<div class="facts">${facts.map(f => `<b>${esc(f)}</b>`).join(" · ")}</div>`;
+    if (p.card.caveat) h += `<div class="caveat">${esc(p.card.caveat)}</div>`;
+    if (p.bib.title) h += `<div class="note" style="margin-top:3px">${esc(p.bib.title)}</div>`;
+  } else if (p.abstract) {
+    h += `<div class="note">${esc(trunc(p.abstract.replace(/\s+/g, " "), 220))}</div><div class="note" style="color:var(--faint)">（抄録の冒頭。研究カードはまだありません）</div>`;
+  } else {
+    h += `<div class="note">${esc(p.bib.title || idOf(p))}</div><div class="note" style="color:var(--faint)">研究カード・抄録ともにありません</div>`;
+  }
+  return h;
+}
+function bindPapers() {
+  const t = $("#p-text"); if (!t) return;
+  t.addEventListener("input", debounce(() => { state.pText = t.value; state.pLimit = PAGE; renderList(); refocus("#p-text"); }, 200));
+  const pq = $("#p-q"); if (pq) pq.addEventListener("change", e => { state.pQ = e.target.value; state.pLimit = PAGE; writeHash(false); renderList(); });
+  for (const [id, k] of [["#p-kind", "pKind"], ["#p-dec", "pDec"], ["#p-depth", "pDepth"], ["#p-use", "pUse"], ["#p-origin", "pOrigin"], ["#p-sort", "pSort"]]) {
+    $(id).addEventListener("change", e => { state[k] = e.target.value; state.pLimit = PAGE; renderList(); });
+  }
+  const m = $("#p-more-rows"); if (m) m.addEventListener("click", () => { state.pLimit += PAGE; renderList(); });
+}
+function detailPaper(p) {
+  const id = idOf(p), authors = authorsOf(p), links = [];
+  if (p.key.startsWith("doi:")) links.push(`<a href="https://doi.org/${esc(id)}" target="_blank" rel="noopener">DOI</a>`);
+  if (p.srcs.pmid) links.push(`<a href="https://pubmed.ncbi.nlm.nih.gov/${esc(p.srcs.pmid)}/" target="_blank" rel="noopener">PubMed</a>`);
+  if (p.srcs.pmcid) links.push(`<a href="https://pmc.ncbi.nlm.nih.gov/articles/${esc(p.srcs.pmcid)}/" target="_blank" rel="noopener">PMC（本文）</a>`);
+  if (p.srcs.oaid) links.push(`<a href="https://openalex.org/${esc(p.srcs.oaid)}" target="_blank" rel="noopener">OpenAlex</a>`);
+  if (p.trial) links.push(`<a href="https://clinicaltrials.gov/study/${esc(id)}" target="_blank" rel="noopener">ClinicalTrials.gov</a>`);
+  let h = `<div class="kicker">${esc(who(p))}${p.bib.journal ? " · " + esc(p.bib.journal) : ""}</div><h2>${esc(p.bib.title || id)}</h2>
+    <div>${paperMarks(p)}</div>`;
+  if (p.card) {
+    h += `<div class="card"><div class="note">${esc(kindLabel(p.card.kind))}</div><div class="claim">${esc(p.card.claim || "")}</div>
+      ${slotsOf(p).length ? `<dl class="kv">${slotsOf(p).map(sid => `<dt>${esc(slotLabel(sid))}</dt><dd>${esc(p.card.slots[sid])}</dd>`).join("")}</dl>` : ""}
+      ${p.card.caveat ? `<div class="caveat">${esc(p.card.caveat)}</div>` : ""}</div>`;
+  } else {
+    h += `<div class="card note">研究カードはありません（${p.title_only ? "題名だけ見た候補" : "抄録を読んだ記録が無いか、カード導入前の記録"}）。</div>`;
+  }
+  const src = { pubmed: "PubMed", openalex: "OpenAlex", "clinicaltrials.gov": "ClinicalTrials.gov" }[p.abstract_src] || p.abstract_src || "";
+  h += sec(p.trial ? "登録概要" : "抄録", null, p.abstract
+    ? `<div class="note" style="margin-bottom:4px">${esc(src)} から取得した原文。AI が読んだ範囲を示すものではありません。</div><div class="abstract">${esc(p.abstract)}</div>`
+    : `<div class="note">未取得（/view で取得を試みます）</div>`);
+  const dec = decisionOf(p);
+  h += sec("この調査での扱い", null, `<dl class="kv">
+      <dt>判断</dt><dd>${dec ? esc(DECISION[dec] || dec) : '<span class="note">記録なし</span>'}</dd>
+      ${p.why ? `<dt>理由</dt><dd>${esc(p.why)}</dd>` : ""}
+      <dt>問い</dt><dd>${(p.qs || []).length ? p.qs.map(x => `<a href="#" data-sel="q:${esc(x)}">${esc(x)}</a> <span class="note">${esc(trunc(Q.get(x)?.question || "", 30))}</span>`).join("<br>") : '<span class="note">紐づけなし</span>'}</dd>
+      <dt>読んだ深さ</dt><dd>${p.depth ? esc(DEPTH[p.depth]) : '<span class="note">記録なし</span>'}</dd>
+      <dt>台帳</dt><dd>${p.in_seen ? `seen.jsonl（初回 ${esc(p.seen || "?")}）` : "seen.jsonl 未登録"}${p.zot ? " · Zotero 所持" : ""}</dd>
+      <dt>書誌</dt><dd>${esc(authors.slice(0, 6).join(", "))}${authors.length > 6 ? " ほか" : ""}${p.bib.year ? " (" + esc(p.bib.year) + ")" : ""}<div>${links.join(" · ")} <span class="mono note">${esc(id)}</span></div></dd>
+    </dl>`);
+  if (p.used_in.length) h += sec("答えの根拠として", p.used_in.length, `<ul class="plain">${p.used_in.map(u => { const q = Q.get(u.q); const pt = q?.points?.[u.point]; return `<li><a href="#" data-sel="q:${esc(u.q)}">${esc(u.q)}</a> ${esc(trunc(pt?.text || q?.question || "", 90))}</li>`; }).join("")}</ul>`);
+  h += sec("到達経路", p.occ.length, `<ul class="plain">${p.occ.slice().reverse().map(o => {
+    const r = R.get(o.run) || {};
+    if (r.legacy) return `<li>${esc(o.date)} <span class="note">seen.jsonl に追加（どの実行・検索かは記録なし）</span> <a href="#" data-sel="r:${esc(o.run)}">この日</a></li>`;
+    const via = (o.via || []).map(v => `${esc(v)}：${esc(queryLabel(r, v))}`).join("／");
+    return `<li>${esc(o.date)} <a href="#" data-sel="r:${esc(o.run)}">${esc(o.run)}</a>${via ? " ← " + via : ""} ${o.new === true ? chip("新規") : o.new === false ? chip("既出") : ""} ${o.decision ? chip(DECISION[o.decision] || o.decision) : ""}${o.reason ? " " + chip(REASON[o.reason] || o.reason) : ""}${o.why ? `<div class="note">${esc(o.why)}</div>` : ""}</li>`;
+  }).join("")}</ul>`);
+  const miss = [];
+  if (!p.bib.title) miss.push("書誌（題名・著者）未取得");
+  if (p.depth !== "fulltext") miss.push(p.depth ? `本文は未確認（${DEPTH[p.depth]}まで）` : "どこまで読んだかの記録なし");
+  if (origin(p) === "legacy") miss.push("どの検索で見つけたかの記録なし");
+  if (!p.card && !p.title_only) miss.push("研究カードなし");
+  if (miss.length) h += sec("未取得・未確認", miss.length, `<ul class="plain missing">${miss.map(m => `<li>${esc(m)}</li>`).join("")}</ul>`);
+  h += extrasSec(p.extra);
+  const items = [];
+  if (p.key.startsWith("doi:")) {
+    items.push(["本文で内容を確認", req("digest", `${id} を本文で確認（${trunc(p.bib.title, 60)}）`)]);
+    items.push(["支持・反論・撤回を確認", req("cite", id)]);
+    items.push(["この論文の周辺を探す", req("scout", `${id}（${trunc(p.bib.title, 50)}）の関連論文を探す`)]);
+  }
+  return h + reqSection(items);
+}
+
+// ------------------------------------------------------------ 検索履歴
+function runMatches(r, t) { return !t || [r.run, r.ask, r.intent, ...(r.queries || []).flatMap(q => [q.q, q.label])].join(" ").toLowerCase().includes(t); }
+function renderRuns() {
+  const t = state.rText.trim().toLowerCase();
+  const cmds = [...new Set(D.runs.filter(r => !r.legacy).map(r => r.cmd))];
+  const rec = D.runs.filter(r => !r.legacy && (!state.rCmd || r.cmd === state.rCmd) && runMatches(r, t)).slice().reverse();
+  const leg = D.runs.filter(r => r.legacy && runMatches(r, t)).slice().reverse();
+  const openGaps = D.gaps.filter(g => !g.resolved);
+  const opt = (v, l, cur) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`;
+  let h = `<div class="toolbar"><input type="search" id="r-text" placeholder="依頼・解釈・検索式で検索" value="${esc(state.rText)}">
+    ${cmds.length > 1 ? `<select id="r-cmd">${opt("", "コマンド：すべて", state.rCmd)}${cmds.map(c => opt(c, c, state.rCmd)).join("")}</select>` : ""}
+    ${openGaps.length ? `<button class="btn ${state.showGaps ? "on" : ""}" id="r-gaps">未スクリーニング ${openGaps.length}</button>` : ""}</div>`;
+  if (state.showGaps && openGaps.length) {
+    h += `<div class="gapbox">${openGaps.map(g => {
+      const r = R.get(g.run), q = queryOf(r, g.query);
+      const text = req("scout", `${g.run} の ${g.query || ""}${q ? "（" + (q.label || trunc(q.q, 40)) + "）" : ""}の未スクリーニング${g.n ? " " + g.n + " 件" : ""}をスクリーニング${q ? "。式：" + q.q : ""}`);
+      return `<div class="gap"><span class="txt"><a href="#" data-sel="r:${esc(g.run)}">${esc(g.date)} ${esc(g.query || "")}</a> ${esc(q ? (q.label || "") : "")} — ${g.n ? esc(g.n) + " 件" : ""} <span class="note">${esc(g.note || "")}</span></span><button class="btn" data-copy="${esc(text)}">依頼文をコピー</button></div>`;
+    }).join("")}</div>`;
+  }
+  if (!rec.length && !leg.length) return h + `<div class="empty">条件に合う実行はありません。</div>`;
+  let last = null;
+  for (const r of rec) { if (r.date !== last) { h += `<div class="datehead">${esc(r.date)}</div>`; last = r.date; } h += runRow(r); }
+  if (leg.length) {
+    const nq = leg.reduce((a, r) => a + n(r.queries), 0), np = leg.reduce((a, r) => a + n(r.papers), 0);
+    h += `<div class="datehead">実行記録の外にあるもの</div><div class="row dim ${state.showLegacy ? "open" : ""}"><div class="l0" id="r-legacy"><span class="caret">▶</span><div class="main">${leg.length} 日分（クエリ ${nq}・seen 追加 ${np}）<div class="hl">query-log と seen にだけ残っている検索・文献。どの実行のものか、件数・読んだ範囲は不明</div></div></div>
+      ${state.showLegacy ? `<div class="l1">${leg.map(r => `<div><a href="#" data-sel="r:${esc(r.run)}">${esc(r.date)}</a> <span class="note">クエリ ${n(r.queries)}・seen 追加 ${n(r.papers)}</span></div>`).join("")}</div>` : ""}</div>`;
+  }
+  return h;
+}
+function runRow(r) {
+  const k = "r:" + r.run, open = state.open.has(k);
+  const nNew = (r.papers || []).filter(p => p.new === true).length;
+  const gaps = D.gaps.filter(g => g.run === r.run && !g.resolved).length;
+  const facts = [`${n(r.queries)} 検索`, `${n(r.papers)} 件${nNew ? `（新規 ${nNew}）` : ""}`];
+  if (n(r.title_only)) facts.push(`題名のみ ${r.title_only.length}`);
+  if (gaps) facts.push(`残り ${gaps} 集合`);
+  const marks = [r.cmd !== "scout" ? chip(r.cmd, "acc") : "", r.reconstructed ? chip("報告書から復元", "warn") : ""].join("");
+  return `<div class="row ${open ? "open" : ""}" data-key="${esc(k)}">
+    <div class="l0" data-toggle="${esc(k)}"><span class="caret">▶</span>
+      <div class="main"><div class="line">${esc(r.ask || "（依頼の記録なし）")}</div><div class="hl" style="white-space:normal">${esc(facts.join(" · "))}</div></div>
+      <span class="marks">${marks}</span></div>
+    ${open ? `<div class="l1">${runL1(r)}</div>` : ""}</div>`;
+}
+function runL1(r) {
+  const qs = r.queries || [];
+  if (!qs.length) return `<div class="note">検索はありません。</div>`;
+  const sc = s => s ? ["title", "abstract", "fulltext"].map(k => s[k] ?? "–").join("/") : "?";
+  return `<table class="qt"><colgroup><col class="c-id"><col><col class="c-n"><col class="c-s"></colgroup>
+    <tr><th></th><th>検索内容</th><th class="num">ヒット</th><th class="num">題/抄/本</th></tr>
+    ${qs.map(q => `<tr><td class="mono">${esc(q.id || "")}</td><td>${esc(q.label || trunc(q.q, 70))}${q.src !== "pubmed" ? ` <span class="note">${esc(q.src)}</span>` : ""}</td><td class="num">${q.hits ?? "?"}</td><td class="num">${sc(q.screened)}</td></tr>`).join("")}</table>`;
+}
+function bindRuns() {
+  const t = $("#r-text"); if (!t) return;
+  t.addEventListener("input", debounce(() => { state.rText = t.value; renderList(); refocus("#r-text"); }, 200));
+  const c = $("#r-cmd"); if (c) c.addEventListener("change", e => { state.rCmd = e.target.value; renderList(); });
+  const g = $("#r-gaps"); if (g) g.addEventListener("click", () => { state.showGaps = !state.showGaps; renderList(); });
+  const l = $("#r-legacy"); if (l) l.addEventListener("click", () => { state.showLegacy = !state.showLegacy; renderList(); });
+}
+function detailRun(r) {
+  if (r.legacy) {
+    let h = `<div class="kicker">実行記録の外</div><h2>${esc(r.date)}</h2>
+      <p class="note">この日の query-log と seen のうち、どの実行記録（runs/）にも載っていないものです。分かるのは、打った式と台帳に入った文献だけです。報告書が残っていれば /view --restore で復元できます。</p>`;
+    if (n(r.queries)) h += sec("この日のクエリ", r.queries.length, r.queries.map(q => `<div><span class="note">${esc(q.src)}</span><code class="qcode">${esc(q.q)}</code></div>`).join(""));
+    if (n(r.papers)) h += sec("この日に seen に追加", r.papers.length, `<ul class="plain">${r.papers.map(x => `<li><a href="#" data-sel="p:${esc(x.key)}">${esc(shortRef(P.get(x.key)))}</a></li>`).join("")}</ul>`);
+    return h;
+  }
+  const nNew = (r.papers || []).filter(p => p.new === true).length;
+  let h = `<div class="kicker">${esc(r.run)}${r.reconstructed ? " · 報告書から復元" : ""}</div><h2>${esc(r.ask || "（依頼の記録なし）")}</h2>
+    <div class="note">${n(r.queries)} 検索 · ${n(r.papers)} 件（新規 ${nNew}）${n(r.title_only) ? ` · 題名のみ ${r.title_only.length}` : ""}</div>`;
+  if (r.intent) h += sec("実行前の解釈", null, `<div class="answer">${esc(r.intent)}</div>`, true);
+  if (n(r.questions)) h += sec("対象の問い", r.questions.length, `<ul class="plain">${r.questions.map(id => `<li><a href="#" data-sel="q:${esc(id)}">${esc(id)}</a> ${esc(Q.get(id)?.question || "")}</li>`).join("")}</ul>`);
+  if (n(r.queries)) h += sec("検索", r.queries.length, r.queries.map(q => `<div style="margin:6px 0"><div><span class="mono">${esc(q.id || "")}</span> <span class="note">${esc(q.src || "")}</span> ${esc(q.label || "")}</div>
+      <code class="qcode">${esc(q.q || "")}</code>${q.actual ? `<div class="note">実際に検索された式：</div><code class="qcode">${esc(q.actual)}</code>` : ""}
+      <div class="note">ヒット ${q.hits ?? "?"} → 題名 ${q.screened?.title ?? "–"} / 抄録 ${q.screened?.abstract ?? "–"} / 本文 ${q.screened?.fulltext ?? "–"}${q.note ? "。" + esc(q.note) : ""}</div></div>`).join(""));
+  const gaps = D.gaps.filter(g => g.run === r.run);
+  if (gaps.length) h += sec("未スクリーニング", gaps.length, `<ul class="plain missing">${gaps.map(g => `<li>${esc(g.query || "")} ${g.n ? esc(g.n) + " 件" : ""} ${esc(g.note || "")} ${g.resolved ? chip("対応済み", "ok") : ""}</li>`).join("")}</ul>`);
+  if (n(r.papers)) h += sec("抄録まで読んだ文献", r.papers.length, `<ul class="plain">${r.papers.map(x => { const k = keyOfRunPaper(x); const p = P.get(k); return `<li><a href="#" data-sel="p:${esc(k)}">${esc(who(p))}</a> <span class="note">${esc(trunc(p?.card?.claim || p?.bib?.title || "", 60))}</span></li>`; }).join("")}</ul>`);
+  if (n(r.title_only)) h += sec("題名だけ見た候補", r.title_only.length, `${r["x-title_only_note"] ? `<div class="note">${esc(r["x-title_only_note"])}</div>` : ""}<ul class="plain">${r.title_only.map(x => { const k = keyOfRunPaper(x); const p = P.get(k); return `<li><a href="#" data-sel="p:${esc(k)}">${esc(trunc(p?.bib?.title || x.title || k, 80))}</a>${x.reason ? " " + chip(REASON[x.reason] || x.reason) : ""}</li>`; }).join("")}</ul>`);
+  const s = r.sources;
+  if (s) h += sec(`情報源${s.theme ? "（" + s.theme + "）" : ""}`, null, `<dl class="kv"><dt>検索済み</dt><dd>${esc((s.searched || []).join("、") || "—")}</dd><dt>未実施</dt><dd>${esc((s.not_run || []).join("、") || "—")}</dd><dt>手段なし</dt><dd>${esc((s.no_access || []).join("、") || "—")}</dd></dl>`);
+  if (r.report) h += sec("報告書", null, `<a href="${esc(r.report)}" target="_blank">${esc(r.report)}</a>`);
+  h += extrasSec(Object.fromEntries(Object.entries(r).filter(([k]) => k.startsWith("x-") && k !== "x-title_only_note")));
+  return h + reqSection([["この依頼と被らない角度で再検索", req("scout", `もっと他を：${r.run}「${trunc(r.ask || "", 60)}」と被らない角度で`)]]);
+}
+const PMID2KEY = new Map(D.papers.filter(p => p.srcs?.pmid).map(p => [String(p.srcs.pmid), p.key]));
+function keyOfRunPaper(x) {
+  if (x.key) return x.key;
+  if (x.nct) return "nct:" + String(x.nct).toUpperCase();
+  if (x.doi) return "doi:" + String(x.doi).toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, "");
+  if (x.pmid) return PMID2KEY.get(String(x.pmid)) || "pmid:" + x.pmid;
+  const t = (x.bib?.title || x.title || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return "title:" + t + "|" + (x.bib?.year || x.year || "");
+}
+
+// ------------------------------------------------------------ 共通
+function extrasSec(ex) {
+  const e = Object.entries(ex || {}); if (!e.length) return "";
+  return sec("追加情報", e.length, `<dl class="kv">${e.map(([k, v]) => `<dt>${esc(k.slice(2))}</dt><dd>${esc(typeof v === "string" ? v : JSON.stringify(v))}</dd>`).join("")}</dl>`);
+}
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+function refocus(sel) { const el = $(sel); if (el) { el.focus(); const v = el.value.length; el.setSelectionRange(v, v); } }
+function markSelected() {
+  document.querySelectorAll(".row.sel").forEach(e => e.classList.remove("sel"));
+  if (state.sel) document.querySelectorAll(`.row[data-key="${CSS.escape(state.sel)}"]`).forEach(e => e.classList.add("sel"));
+}
+function renderList() {
+  const l = $("#list");
+  if (state.tab === "papers") { l.innerHTML = renderPapers(); bindPapers(); }
+  else if (state.tab === "runs") { l.innerHTML = renderRuns(); bindRuns(); }
+  else { state.tab = "questions"; l.innerHTML = renderQuestions(); bindQuestions(); }
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === state.tab));
+  markSelected();
+}
+function renderDetail() {
+  const d = $("#detail"), sel = state.sel || "", i = sel.indexOf(":"), type = sel.slice(0, i), id = sel.slice(i + 1);
+  let h;
+  if (type === "q" && Q.has(id)) h = detailQuestion(Q.get(id));
+  else if (type === "p" && P.has(id)) h = detailPaper(P.get(id));
+  else if (type === "r" && R.has(id)) h = detailRun(R.get(id));
+  else h = overview();
+  d.innerHTML = (sel ? `<a href="#" class="back" id="back">← 戻る</a>` : "") + h;
+  const b = $("#back"); if (b) b.addEventListener("click", e => { e.preventDefault(); history.back(); });
+  d.scrollTop = 0;
+}
+function overview() {
+  const s = D.stats, qs = D.questions, cnt = st => qs.filter(q => q.status === st).length;
+  return `<h2>このプロジェクトの記録</h2>
+    <dl class="kv">
+      <dt>問い</dt><dd>${qs.length}（進行中 ${cnt("active")}・回答済み ${cnt("answered")}）</dd>
+      <dt>文献</dt><dd>論文 ${s.papers}・試験 ${s.trials}（カード ${s.cards}）</dd>
+      <dt>題名のみ</dt><dd>${s.title_only || 0}</dd>
+      <dt>実行</dt><dd>${s.runs}（記録の外 ${s.legacy_runs} 日分）</dd>
+      <dt>作成</dt><dd>${esc(D.built)}</dd>
+    </dl>
+    <p class="note" style="margin-top:12px">一覧の行をクリックするとその場で要点が開き、ここに詳細が出ます。詳細の各節はクリックで開きます。</p>
+    ${CARD.preset_label ? `<p class="note">研究カードのひな形：${esc(CARD.preset_label)}</p>` : ""}`;
+}
+function renderAll() { renderList(); renderDetail(); }
+function initHeader() {
+  document.title = D.project + " — 文献調査ビュー";
+  $("#h-project").textContent = D.project;
+  $("#h-stats").textContent = `作成 ${D.built}`;
+  const pur = $("#h-purpose");
+  if (D.purpose) pur.querySelector(".purpose-body").textContent = D.purpose; else pur.hidden = true;
+  if (D.warnings.length) {
+    const w = $("#h-warns"); w.hidden = false;
+    w.querySelector("summary").textContent = `⚠ データの警告 ${D.warnings.length} 件`;
+    w.querySelector("ul").innerHTML = D.warnings.map(x => `<li>${esc(x)}</li>`).join("");
+  }
+  $("#n-questions").textContent = D.questions.length;
+  $("#n-papers").textContent = D.stats.papers;
+  $("#n-runs").textContent = D.runs.filter(r => !r.legacy).length;
+  document.querySelectorAll("#tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  const seg = $("#prefix-seg");
+  const paint = () => seg.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.p === prefix));
+  seg.querySelectorAll("button").forEach(b => b.addEventListener("click", () => { prefix = b.dataset.p; store("lsv-prefix", prefix); paint(); renderDetail(); }));
+  paint();
+}
+readHash();
+if (state.sel) state.open.add(state.sel);
+if (!location.hash && !D.questions.length) state.tab = "runs";
+initHeader();
+renderAll();
+</script>
+</body>
+</html>
