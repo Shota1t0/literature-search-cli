@@ -1,0 +1,4 @@
+# /method は「この手法の位置づけを調べたい」と人が明示した時だけ動かす（.claude/commands/method.md）。
+# Codex が会話内容から暗黙に起動しないようにする。明示の `$method` は従来どおり動く。
+policy:
+  allow_implicit_invocation: false

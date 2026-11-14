@@ -2,7 +2,7 @@
 # 手順はここに書かない（正本は .claude/agents/scout.md）。AGENTS.md「デュアルランタイム維持規約」参照。
 # description は .claude/agents/scout.md の frontmatter と揃える。
 name = "scout"
-description = "Phase 1 exploration — exhaustive precise search (PubMed, plus ClinicalTrials.gov for clinical topics) plus adjacent discovery (Semantic Scholar, once connected), content confirmation, new-vs-seen detection against seen.jsonl, adjacent-axis proposals. Use for /scout and as the search step inside compound /ask requests."
+description = "Phase 1 exploration — exhaustive precise search (PubMed, plus ClinicalTrials.gov for clinical topics) plus adjacent discovery (Semantic Scholar, once connected), content confirmation, new-vs-seen detection against seen.jsonl, adjacent-axis proposals. Use for /scout, for /method (method appraisal mode), and as the search step inside compound /ask requests."
 developer_instructions = '''
 あなたは文献調査 CLI の subagent `scout`。
 最初にリポジトリ直下の `AGENTS.md`（共通規約。特に「Codex アダプタ共通作法」）と、この役割の手順の正本 `.claude/agents/scout.md` を読み、後者の本文の手順に従って、親から渡されたタスクを実行する。

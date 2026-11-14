@@ -41,6 +41,7 @@ AI コーディングエージェントの subagent と MCP を使って、文�
 |---|---|---|---|
 | `/new-project <name>` | `$new-project <name>` | （直接実行） | プロジェクト作成（`seen.jsonl` / `query-log.jsonl` / `landscape.md`） |
 | `/scout [project] <query>` | `$scout ...` | scout | ① PubMed で網羅探索、新規/既出判定、隣接軸提案 |
+| `/method [project] <手法名> [--for "…"] [--from "…"]` | `$method ...` | scout（手法の採用判断モード） | 手法の前提・他の方法との関係・分野での扱い・適用範囲・未確認点を整理し、専門家への質問票を作る。明示的に呼んだ時だけ動く |
 | `/map [project]` | `$map ...` | cartographer | ② seen 集合を OpenAlex で俯瞰し、`landscape.md` 更新を提案 |
 | `/network [project] <author or work>` | `$network ...` | network | 著者・共著・共引用ネットワークから周辺論文を発掘 |
 | `/cite [project] <DOI> \| --topic "<text>" \| --recent N` | `$cite ...` | citation | ③ Scite で supporting / contrasting / mentioning・撤回を評価（単一・群） |
@@ -56,6 +57,9 @@ AI コーディングエージェントの subagent と MCP を使って、文�
 - `--source <list>`：ソースを明示指定（`--source pubmed` / `--source pubmed,clinicaltrials` / `--source pubmed,s2`）。省略時は scout が意図から選び、**選択理由を実行前に宣言**する。
 - `--exclude-zotero`：Zotero に所持済みの論文を除き、未所持だけを報告する（scout / ask に付けられる横断フィルタ）。
 - `/cite` の入力形態：単一 DOI／`--topic "<text>"`（seen 内のタイトル近似マッチ群）／`--recent N`（seen に最近追加した N 件）。複数件では群としてのトレンドも返す。
+- `/method` の `--for`：使おうとしている対象・データ・目的。これがあると「自分の対象で前提が成り立つか」を問いにできる。
+- `/method` の `--from`：検証したい提案文・主張。AI の回答、共同研究者の意見、論文や教科書の一文など、出どころは問わない。主張に分けて Scite で支持・反論の引用文を確かめ、「根拠あり／反論あり／見つからず／未調査」に分ける。
+- `/method` は採否を決めない。何が確かめられ、何が探しても見つからず、何をまだ探していないかを分け、専門家に相談できる形まで整理する。書籍・章は OpenAlex で存在を確かめるだけ（書誌レベル）。
 - `/digest`：Zotero への追加は**既定では行わない**。「Zoteroに登録して」等の明示要求がある時だけ追加し、`seen.jsonl` の `zot` フラグを更新する。
 
 ### 3.3 単一コマンドと `/ask` の使い分け
@@ -63,6 +67,7 @@ AI コーディングエージェントの subagent と MCP を使って、文�
 | 入口 | 使う場面 |
 |---|---|
 | `/scout` `/map` `/network` `/cite` `/digest` | 意図が単一のとき（直接・高速） |
+| `/method <手法名>` | 手法を使ってよいか判断する材料を、決まった問い（前提・関係・扱い・適用範囲・確認事項）で集めたいとき |
 | `/ask <複合クエリ>` | 探索 + 俯瞰 + 著者 + Zotero 照合が絡むとき |
 
 orchestrator は**固定連鎖ではなく、問いごとにその場で分解してディスパッチ**する。新しい判断はせず、既存 subagent を呼び分けるだけの薄い層。
@@ -83,12 +88,12 @@ Claude Code では各コマンドが subagent に fork して動く。Codex で�
 - 冒頭に**検索実施サマリ**（クエリごとのヒット数・読んだ件数と粒度・未スクリーニング集合）。
 - 結果は**既出も含めて全件表示**し、新規をマークする（人は忘れるため既出も出す）。
 - 末尾に**隣接軸**を提案する。新規÷総数の低下を「その軸の掘り尽くし度」とみなす。
+- 調査結果は会話と、対応する JSON 記録・ビューに集約し、`workspace/` に調査結果の Markdown を蓄積しない。Obsidian への保存は明示指示がある場合だけ行い、未接続時も workspace に代替出力しない。例外・保存先の詳細は `AGENTS.md`「調査結果の保存・出力先」を参照。
 
 ```
 🆕 [新規] Author 2025  ProteinX drives PathwayY dysregulation...  (cited 34)
    [既出] Author 2023  ProteinZ gain-of-function...               (cited 89)
 
-- 調査結果は会話と、対応する JSON 記録・ビューに集約し、`workspace/` に調査結果の Markdown を蓄積しない。Obsidian への保存は明示指示がある場合だけ行い、未接続時も workspace に代替出力しない。例外・保存先の詳細は `AGENTS.md`「調査結果の保存・出力先」を参照。
 今回12件（新規2/既出10）。この軸はほぼ掘り尽くし。
 未探索の隣接軸：PathwayA × CellTypeB / DrugClassC 側からの逆引き ...
 ```
@@ -225,7 +230,7 @@ literature-search-cli/
 ├── CLAUDE.md                     # Claude Code 用エントリ（@AGENTS.md を読み込むだけ）
 ├── .claude/                      # 手順書の正本（両ランタイム共通）
 │   ├── agents/                   #   役割の手順：scout / cartographer / network / citation / synthesizer / orchestrator
-│   └── commands/                 #   コマンド：new-project / scout / map / network / cite / digest / ask / view
+│   └── commands/                 #   コマンド：new-project / scout / method / map / network / cite / digest / ask / view
 ├── tools/build_view.py           # ビューの生成（検証・統合・埋め込みだけ。判断はしない）
 ├── viewer/template.html          # ビューの共通テンプレート（プロジェクトごとに書き換えない）
 ├── viewer/card-presets.json      # 研究カードのひな形 4 種類

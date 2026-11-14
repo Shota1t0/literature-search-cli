@@ -88,7 +88,7 @@
 
 「何を検索したか後から忘れる」ことへの対策。1 回の実行で 1 ファイルを `workspace/<project>/runs/<run-id>.json` に新規作成し、作成後は書き換えない。判定には使わない。`_scratch/` 実行時は書かない。
 
-- **記録に対応したコマンド**：scout（`/scout` と、`/ask` から呼ばれた scout）と `/view`（報告書からの復元）。cartographer / network / citation / synthesizer は未対応（対応するまで、その実行はビューに「実行記録の外」として出るか、出ない）。
+- **記録に対応したコマンド**：scout（`/scout`、`/method`、`/ask` から呼ばれた scout）と `/view`（報告書からの復元）。`/method` の run-id の `<cmd>` は `method`。cartographer / network / citation / synthesizer は未対応（対応するまで、その実行はビューに「実行記録の外」として出るか、出ない）。
 - **run-id**：`<YYYY-MM-DD>_<NN>_<cmd>`（例：`2026-11-12_01_scout`）。`NN` はその日のそのプロジェクトでの通し番号（`Glob("workspace/<project>/runs/<日付>_*.json")` の件数 + 1、2 桁）。ファイル名と `run` を一致させる。
 - **書き方**：Claude Code は `Write` で新規作成。Codex は `apply_patch` の Add File。JSON は UTF-8・インデント付きでよい。
 
@@ -166,10 +166,14 @@
     "points": [
       {"text": "早期PDで閾値以上の抑うつの47%が6か月以内に寛解",
        "dois": ["10.1002/mds.22572"],       // 根拠。登録試験は NCT 番号を書いてよい
-       "depth": "abstract"}                 // この主張を確かめた粒度
+       "depth": "abstract",                 // この主張を確かめた粒度
+       "role": "original"}                  // 任意。根拠にした資料の種類（下記「根拠の種類」）
     ],
     "conflicts": ["不安：状態が安定する研究と、軽症群で改善する研究がある"],
-    "open": ["尺度・閾値の違いの影響", "後ろ向き研究は未確認"]
+    "open": ["尺度・閾値の違いの影響",          // 文字列：探したかどうかの区別なし（従来の書き方）
+             {"text": "後ろ向き研究での経過",    // 状態付き：探したが見つからないのか、まだ探していないのか
+              "status": "not_found",          // not_found 探したが見つからない / not_searched 未調査
+              "searched": ["2026-11-12_01_scout#R3"]}]   // not_found の時に、どの検索で探したか
   }]
 }
 ```
@@ -178,6 +182,12 @@
 - **既存の問いを優先**：書く前に `findings/*.json` を読み、既存の問い（下位の問いを含む）に収まるなら新しく立てない。収まらない時だけ新しい問いを `"proposed": true` で書き、報告の末尾で「新しい問いの提案」として示す。承認・却下は人が行い、`/view` が状態の更新を書く。
 - **答えは 3 段で書く**：`headline` は一覧で読む 1 行（結論だけ。数値や但し書きは入れない）、`answer` は文章、`points` は主張 1 つ＋根拠の DOI＋確かめた粒度。根拠の DOI は、同じ実行の runs/ の `papers` か `seen.jsonl` にあるものだけ（無い DOI はビルド時に警告になる）。
 - **状態の意味**：`active` 進行中／`answered` 回答済み（当面これ以上追わない）／`parked` 保留（今は追わない）／`merged` 他の問いに統合（`merged_into` に統合先）／`dropped` やめた。どれも消さずに残し、ビューでは既定で隠す。
+- **根拠の種類（`points[].role`、任意）**：その主張を、どの種類の資料で確かめたか。`original` 原著／`origin` 手法の原典／`tutorial` 解説・チュートリアル／`comparison` 比較・ベンチマーク／`guideline` ガイドライン・報告指針／`review` レビュー／`application` 応用例／`critique` 批判・コメント・注意喚起／`book` 書籍・章（書誌のみ）／`citation_statement` 他の論文の引用文（Scite）。
+  - 資料の種類によって、どの問いの根拠として強いかが違う。例：応用例は「その条件で使われた」の根拠にはなるが、「適用してよい」「標準的だ」の根拠としては弱い。
+  - 説明が詳しい資料と、判断の根拠として強い資料は同じとは限らない。
+  - 資料に書かれていないことは、問題がない・重要でないことの根拠にしない。
+  - `/method` は必ず書く。他のコマンドでは書ける時だけ書く。
+- **未解決の状態（`open` の状態付きの形）**：「探したが見つからない」（`not_found`。探した検索を `searched` に書く）と「まだ探していない」（`not_searched`）を区別する。文字列だけの項目は、区別していない従来の書き方として扱う。
 
 ## 研究カード規約
 
@@ -276,6 +286,7 @@
   | 非英語文献（地域データベース） | なし（医中誌・CNKI・LILACS 等は未接続）。OpenAlex は非英語文献も一部収載 |
   | 学会抄録 | なし（Embase 未接続） |
   | PubMed 外の分野 | OpenAlex |
+  | 書籍・章 | OpenAlex（`/method` が書誌レベルで存在だけ確認。本文は読めない。参考文献リストを持つ書籍は約 5%（2026-11-14 実測）なので、引用元としての書籍は過小に出る） |
 
   ```
   情報源（テーマ：臨床）：
@@ -317,7 +328,7 @@
 
 - **PubMed**：精密な網羅探索に使用。Claude Code は `claude mcp add --transport http --scope user pubmed https://pubmed.mcp.claude.com/mcp` で登録（2026-10-26）。以前は `pubmed@life-sciences` プラグイン経由（`mcp__plugin_pubmed_PubMed__*`）だったが、配布元マーケットプレイスから削除され読み込まれなくなったため切り替えた。同じ URL の PubMed は `bio-research` プラグインにもあるが、直接登録した方が残る。Codex は同じ URL を `.codex/config.toml` の `[mcp_servers.pubmed]` として登録（2026-11-06。認証なしで汎用 MCP クライアントから initialize できることを確認済み）。
 - **ClinicalTrials.gov**：scout が臨床テーマで登録試験を検索する（`search_trials` / `get_trial_details`）。試験に紐付く論文は PubMed の `NCT<番号>[si]` で探す。Claude Code は `claude mcp add --transport http --scope user clinicaltrials https://hcls.mcp.claude.com/clinical_trials/mcp` で登録（2026-11-07）。同じ URL のサーバーが bio-research プラグインにも `c-trials` として入っているが、Codex とツール名を揃えるため直接登録した方（`clinicaltrials`）を使う。Codex は `.codex/config.toml` の `[mcp_servers.clinicaltrials]`。認証なしで汎用 MCP クライアントから initialize できることを確認済み（2026-11-07）。
-- **Scite**：citation（`/cite`）の主経路。`https://api.scite.ai/mcp`（契約済み、OAuth 認証）。`search_literature(dois=[...])` で DOI 群の supporting/contrasting/mentioning 件数と editorial notice を、`verify_papers` で撤回・反証候補を 1 回 20 件までまとめて取得できる。Claude Code はこのプロジェクトの local scope に登録している（`~/.claude.json`、コミット対象外）。Codex は `.codex/config.toml` の `[mcp_servers.scite]` に登録（2026-11-06）。未認証・未接続の間、citation は Zotero 同梱の Scite ツールに fallback する。
+- **Scite**：citation（`/cite`）の主経路。`https://api.scite.ai/mcp`（契約済み、OAuth 認証）。`search_literature(dois=[...])` で DOI 群の supporting/contrasting/mentioning 件数と editorial notice を、`verify_papers` で撤回・反証候補を 1 回 20 件までまとめて取得できる。Claude Code はこのプロジェクトの local scope に登録している（`~/.claude.json`、コミット対象外）。Codex は `.codex/config.toml` の `[mcp_servers.scite]` に登録（2026-11-06）。未認証・未接続の間、citation は Zotero 同梱の Scite ツールに fallback する。scout は `/method` の時だけ `check_claim`（主張ごとの支持・反論の引用文）と `citation_graph`（原典からの引用のたどり）を使う。使えない場合は、その段を「未実施（Scite 未接続）」と報告し、主張は `not_searched` として残す。
 - **Zotero**：同梱の `scite_enrich_item` / `scite_enrich_search` / `scite_check_retractions` は、citation で独立 Scite MCP が使えない時の fallback（DOI 1 件ずつ／Zotero ライブラリ範囲のツールで、独立 Scite MCP とは別物）。どちらのランタイムもローカル API（`ZOTERO_LOCAL=true`）を使うため Zotero デスクトップの起動が前提。Claude Code は `~/.claude/zotero-mcp-run.ps1` 経由で起動し、リポジトリ直下 `.env`（gitignore）の `ZOTERO_API_KEY` 等（書き込み系に必要）を読み込む。Codex は `zotero-mcp.exe` を `ZOTERO_LOCAL=true` のみで起動しており API キーを渡していないため、書き込み系（`zotero_add_by_*` / `zotero_create_note` / `zotero_update_item` 等）は動かない可能性が高い（未検証）。`/digest` の Zotero 蓄積（opt-in）を Codex でも使うなら、Codex 側の起動コマンドを同じ起動スクリプトに揃える。
 - **OpenAlex**：個人開発 MCP パッケージを信頼せず、認証不要の公開 REST API（`https://api.openalex.org/`）を薄い glue（シェルの curl）経由で叩く方式を採用（2026-08-15）。`mailto=` パラメータを付けて polite pool を利用する。cartographer（concept/group_by 俯瞰）・network（著者/共著解決）が使用。**MCP サーバーではないため `/mcp` には出ない**（ここに接続状況を明記して都度参照する）。Codex での注意は「Codex アダプタ共通作法」6。
 
@@ -348,6 +359,7 @@
 | `/ask` | `$ask` | `.claude/commands/ask.md` | `.claude/agents/orchestrator.md` | なし（Codex では main スレッドが orchestrator を演じる） |
 | `/new-project` | `$new-project` | `.claude/commands/new-project.md` | なし（コマンド本文が手順） | なし |
 | `/view` | `$view` | `.claude/commands/view.md` | なし（コマンド本文が手順） | なし |
+| `/method` | `$method` | `.claude/commands/method.md` | `.claude/agents/scout.md`（「手法の採用判断モード」の節） | `.codex/agents/scout.toml` |
 
 正本は経緯上 `.claude/` 配下にあるが、**両ランタイム共通の手順書**として扱う。手順書は Claude Code のツール名（`Read` / `Write` / `Glob` / `Grep` / `Bash` / `Agent`）と `$ARGUMENTS` で書かれているので、Codex では次の表で読み替える。
 
@@ -372,7 +384,7 @@
 
 1. **正本を読んでから動く**：skill は `.claude/commands/<cmd>.md` を読み、その本文をコマンドの指示として扱う。frontmatter に `agent: <role>` があれば `.claude/agents/<role>.md` も読み、その本文の手順で実行する。custom agent は自分の役割の `.claude/agents/<role>.md` を読む。frontmatter（`context: fork` 等）は Claude Code 用のメタデータで、Codex では下記 2・3 のとおり扱う。
 2. **ツール範囲を守る**：役割の frontmatter `tools:`（コマンドの場合は `allowed-tools:`）が、その役割で使ってよいツールの範囲。Codex は強制しないので自分で守る。読み取り（`Read` / `Glob` / `Grep` 相当）のためのシェル利用はどの役割でも可。`Bash` を持たない役割はシェルでネットワークアクセスしない。`Write` を持たない役割はファイルを書かない。範囲外の MCP ツール（例：citation が Zotero に書き込む）は使わない。
-3. **実行場所**：単一意図の skill（`$scout` `$map` `$network` `$cite` `$digest` `$new-project` `$view`）は、このスレッドで直接手順を実行する（Claude Code の `context: fork` のような隔離はしない）。`$ask` だけは、このスレッドが `orchestrator` を演じ、必要な役割を `.codex/agents/` の custom agent（`scout` / `cartographer` / `network` / `citation` / `synthesizer` の 5 種のみ）として spawn する。Codex 組み込みの `default` / `worker` / `explorer` は使わない。orchestrator 自身はソースに触れず、ファイルも書かない（`orchestrator.md` の制約がそのまま適用される）。
+3. **実行場所**：単一意図の skill（`$scout` `$method` `$map` `$network` `$cite` `$digest` `$new-project` `$view`）は、このスレッドで直接手順を実行する（Claude Code の `context: fork` のような隔離はしない）。`$ask` だけは、このスレッドが `orchestrator` を演じ、必要な役割を `.codex/agents/` の custom agent（`scout` / `cartographer` / `network` / `citation` / `synthesizer` の 5 種のみ）として spawn する。Codex 組み込みの `default` / `worker` / `explorer` は使わない。orchestrator 自身はソースに触れず、ファイルも書かない（`orchestrator.md` の制約がそのまま適用される）。
 4. **custom agent の報告**：spawn された custom agent は、手順書の報告形式どおりの完全な報告を最終メッセージにする。親が解決済みのプロジェクト名を渡した場合は再解決しない。親（orchestrator）はその報告を再判断せずに統合する。
 5. **台帳の書き込み**：`seen.jsonl` / `query-log.jsonl` / `landscape.md` / `runs/` / `findings/` / digest ファイルの書き込みは `apply_patch` で行う（`view.html` と `bib-cache.jsonl` は `tools/build_view.py` が書く）。`>>`・`Add-Content`・`Out-File`・`Set-Content` は使わない。読む時は `-Encoding utf8` を付ける（日本語の文字化け防止）。
 6. **OpenAlex と sandbox**：Codex の Windows sandbox 内では `curl.exe` の TLS 接続が失敗する（`schannel: AcquireCredentialsHandle failed: SEC_E_NO_CREDENTIALS`。2026-11-06 に `codex sandbox` で確認）。OpenAlex 呼び出しは最初から sandbox 外実行（承認要求）で行う。**sandbox が原因の接続失敗は、cartographer / network の「API が機能しない場合」に当たらない**。それを理由に fallback へ切り替えない。

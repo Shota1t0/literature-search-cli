@@ -199,6 +199,16 @@ const DEPTH = { fulltext: "本文", abstract: "抄録", title: "題名" };
 const DECISION = { adopt: "採用", hold: "保留", exclude: "除外", title_only: "題名のみ" };
 const STATUS = { active: "進行中", answered: "回答済み", parked: "保留", merged: "統合", dropped: "中止" };
 const REASON = { off_topic: "対象外", design: "設計が不一致", duplicate: "重複", later: "保留", other: "その他" };
+const ROLE = { original: "原著", origin: "原典", tutorial: "解説", comparison: "比較・ベンチマーク", guideline: "ガイドライン", review: "レビュー", application: "応用例", critique: "批判・注意", book: "書籍（書誌のみ）", citation_statement: "引用文" };
+const OPEN_STATUS = { not_found: "探したが見つからない", not_searched: "未調査" };
+// open の項目は文字列（従来）か {text, status, searched}（AGENTS.md「問いと答え規約」）
+function openText(c) { return typeof c === "string" ? c : (c?.text || ""); }
+function openItem(c) {
+  if (typeof c === "string") return `<li>${esc(c)}</li>`;
+  const st = c?.status ? " " + chip(OPEN_STATUS[c.status] || c.status, c.status === "not_found" ? "warn" : "") : "";
+  const by = (c?.searched || []).length ? `<div class="note">探した検索：${c.searched.map(s => esc(s)).join("、")}</div>` : "";
+  return `<li>${esc(c?.text || "")}${st}${by}</li>`;
+}
 const PAGE = 150;
 
 // ------------------------------------------------------------ 小道具
@@ -303,7 +313,7 @@ function relatedLink(q) {
 }
 function qMatches(q, t) {
   if (!t) return true;
-  return [q.q, q.question, q.headline, q.answer, ...(q.open || []), ...(q.points || []).map(p => p.text)].join(" ").toLowerCase().includes(t);
+  return [q.q, q.question, q.headline, q.answer, ...(q.open || []).map(openText), ...(q.points || []).map(p => p.text)].join(" ").toLowerCase().includes(t);
 }
 function qMarks(q) {
   const m = [];
@@ -384,10 +394,11 @@ function detailQuestion(q) {
   h += sec("答え", null, q.answer ? `<div class="answer">${esc(q.answer)}</div>` : `<div class="note">まだ答えはありません。</div>`, true);
   if (n(q.points)) h += sec("根拠（主張ごと）", q.points.length, q.points.map(pt => {
     const refs = (pt.keys || []).map(k => { const p = P.get(k); return `<span class="ref" data-sel="p:${esc(k)}" title="${esc(p?.bib?.title || k)}">${esc(who(p))}${p?.depth === "fulltext" ? " · 本文" : ""}</span>`; }).join("");
-    return `<div class="point">${esc(pt.text)}<div class="refs">${refs}</div></div>`;
+    const role = pt.role ? " " + chip(ROLE[pt.role] || pt.role) : "";
+    return `<div class="point">${esc(pt.text)}${role}<div class="refs">${refs}</div></div>`;
   }).join(""));
   if (n(q.conflicts)) h += sec("矛盾・対立", q.conflicts.length, `<ul class="plain">${q.conflicts.map(c => `<li>${esc(c)}</li>`).join("")}</ul>`, true);
-  if (n(q.open)) h += sec("未解決", q.open.length, `<ul class="plain missing">${q.open.map(c => `<li>${esc(c)}</li>`).join("")}</ul>`);
+  if (n(q.open)) h += sec("未解決", q.open.length, `<ul class="plain missing">${q.open.map(openItem).join("")}</ul>`);
   const rel = relatedPapers(q.q).filter(p => !p.title_only);
   if (rel.length) {
     const ev = new Set((q.points || []).flatMap(pt => pt.keys || []));
@@ -406,7 +417,7 @@ function detailQuestion(q) {
   if (runs.length) h += sec("関わった実行", runs.length, `<ul class="plain">${runs.map(id => `<li><a href="#" data-sel="r:${esc(id)}">${esc(id)}</a> <span class="note">${esc(trunc(R.get(id).ask || "", 60))}</span></li>`).join("")}</ul>`);
   h += extrasSec(q.extra);
   const dois = [...new Set((q.points || []).flatMap(pt => pt.keys || []).filter(k => k.startsWith("doi:")).map(k => k.slice(4)))];
-  const items = [["未解決点を補う検索", req("scout", `${q.q}「${q.question || ""}」の続き。${n(q.open) ? "未解決：" + q.open.join("／") + "。" : ""}前回の findings と runs を踏まえて検索`)]];
+  const items = [["未解決点を補う検索", req("scout", `${q.q}「${q.question || ""}」の続き。${n(q.open) ? "未解決：" + q.open.map(openText).join("／") + "。" : ""}前回の findings と runs を踏まえて検索`)]];
   if (dois.length) items.push(["根拠を本文で確認して答えを更新", req("digest", `${q.q} の根拠論文を本文で確認し、答えを更新：${dois.join(" ")}`)]);
   if (dois.length) items.push(["根拠への支持・反論・撤回を確認", req("ask", `${q.q} の根拠論文の支持・反論と撤回を確認：${dois.join(" ")}`)]);
   return h + reqSection(items);

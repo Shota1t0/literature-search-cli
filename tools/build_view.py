@@ -38,6 +38,9 @@ DEPTHS = ["title", "abstract", "fulltext"]
 DECISIONS = {"adopt", "hold", "exclude"}
 STATUSES = {"active", "answered", "parked", "merged", "dropped"}
 TITLE_ONLY_REASONS = {"off_topic", "design", "duplicate", "later", "other"}
+POINT_ROLES = {"original", "origin", "tutorial", "comparison", "guideline", "review", "application",
+               "critique", "book", "citation_statement"}
+OPEN_STATUSES = {"not_found", "not_searched"}
 RUN_ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}_[a-z][a-z0-9-]*$")
 UA = {"User-Agent": "literature-search-cli/1.0"}
 
@@ -615,7 +618,17 @@ def build(proj: Path, log: Log, keyer: Keyer | None = None) -> tuple[dict, Keyer
             log.warn(f"問い {qid}: parent「{q['parent']}」が見つからない")
         if q.get("merged_into") and q["merged_into"] not in questions:
             log.warn(f"問い {qid}: merged_into「{q['merged_into']}」が見つからない")
+        for item in q.get("open") or []:
+            if isinstance(item, dict):
+                if item.get("status") not in (None, *OPEN_STATUSES):
+                    log.warn(f"問い {qid}: 未解決の status「{item.get('status')}」は未定義")
+                if item.get("status") == "not_found" and not item.get("searched"):
+                    log.warn(f"問い {qid}: not_found の未解決に searched（探した検索）が無い")
+            elif not isinstance(item, str):
+                log.warn(f"問い {qid}: open の項目は文字列か {{text, status, searched}} にする")
         for j, pt in enumerate(q["points"]):
+            if pt.get("role") not in (None, *POINT_ROLES):
+                log.warn(f"問い {qid}: 根拠の role「{pt.get('role')}」は未定義")
             keys = []
             for ref in pt.get("dois") or []:
                 k = keyer.key({"nct": ref} if str(ref).upper().startswith("NCT") else {"doi": ref})
