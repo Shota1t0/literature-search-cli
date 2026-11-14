@@ -1,6 +1,6 @@
 ---
 name: synthesizer
-description: Summarize/fact-check target literature, output secondary material to Obsidian (once connected). Zotero accumulation is opt-in only, not automatic. Explicitly human-invoked via /digest after direction is settled.
+description: Summarize/fact-check target literature in conversation. Obsidian output and Zotero accumulation are opt-in. Explicitly human-invoked via /digest after direction is settled.
 tools: mcp__zotero__zotero_add_by_doi, mcp__zotero__zotero_add_by_url, mcp__zotero__zotero_add_by_isbn, mcp__zotero__zotero_add_by_bibtex, mcp__zotero__zotero_add_by_csl_json, mcp__zotero__zotero_add_from_file, mcp__zotero__zotero_create_note, mcp__zotero__zotero_create_collection, mcp__zotero__zotero_search_items, mcp__zotero__zotero_get_item_metadata, mcp__zotero__zotero_update_item, mcp__pubmed__get_full_text_article, mcp__pubmed__get_article_metadata, Read, Write, Glob, Grep
 ---
 
@@ -24,9 +24,9 @@ tools: mcp__zotero__zotero_add_by_doi, mcp__zotero__zotero_add_by_url, mcp__zote
 
 4. **seen.jsonl の `zot` フラグ更新（手順3を実行した場合のみ）**：Zotero に追加した各 DOI について、`seen.jsonl` を `Read` → 既存行は書き換えず、同じ DOI で `"zot": true` を持つ新しい行を追記した全文を組み立て → `Write` で書き戻す（AGENTS.md のイベントログ方式）。`_scratch/` 実行時（プロジェクトが存在しない場合）はこの更新を行わない。
 
-5. **二次情報の出力（Obsidian は未接続）**：
-   - **Obsidian MCP は接続されていない**ことを明示する。
-   - 代替として、要約・キュレーション結果を `workspace/{project}/digest-YYYY-MM-DD.md` にローカル出力し、`⚠ Obsidian未接続のため workspace 内に代替出力` と明記する。既に同日のファイルがあれば追記するか確認する。
-   - 接続後は、この代替出力の代わりに Obsidian への実出力に置き換える想定（ツール名 `mcp__obsidian__*` は未確定、README「未確定・後続設計事項」参照）。
+5. **二次情報の出力**：
+   - AGENTS.md「調査結果の保存・出力先」に従う。要約・キュレーション結果は会話に提示する。
+   - Obsidian への出力をユーザーが明示的に指示した場合だけ、指定済みの vault・保存先と利用可能な接続／ファイル操作を確認して出力する。`/digest` の呼び出しだけでは Obsidian へ書き込まない。
+   - 出力先や接続が利用できない場合の扱いも共通規約に従う。`workspace/` に `digest-*.md` 等の代替ファイルは作成しない。
 
-6. **完了報告**：出力した digest ファイルのパスを明示する。Zotero蓄積を実行した場合のみ、追加件数・更新した `zot` フラグの件数も報告する。実行しなかった場合は「Zotero未登録（既定動作）」と一言添える。
+6. **完了報告**：要約・チェック結果を会話で報告する。Obsidian に実際に出力した場合はノートの保存先を示し、指示があっても出力できなかった場合はその理由を示す。Zotero蓄積を実行した場合のみ、追加件数・更新した `zot` フラグの件数も報告する。実行しなかった場合は「Zotero未登録（既定動作）」と一言添える。

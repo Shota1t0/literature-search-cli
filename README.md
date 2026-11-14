@@ -44,7 +44,7 @@ AI コーディングエージェントの subagent と MCP を使って、文�
 | `/map [project]` | `$map ...` | cartographer | ② seen 集合を OpenAlex で俯瞰し、`landscape.md` 更新を提案 |
 | `/network [project] <author or work>` | `$network ...` | network | 著者・共著・共引用ネットワークから周辺論文を発掘 |
 | `/cite [project] <DOI> \| --topic "<text>" \| --recent N` | `$cite ...` | citation | ③ Scite で supporting / contrasting / mentioning・撤回を評価（単一・群） |
-| `/digest [project] [対象] [--zotero]` | `$digest ...` | synthesizer | 要約・ファクトチェック → 二次情報出力。Zotero 蓄積は明示時のみ |
+| `/digest [project] [対象] [--zotero]` | `$digest ...` | synthesizer | 要約・ファクトチェック → 会話で報告。Obsidian 出力・Zotero 蓄積はそれぞれ明示時のみ |
 | `/ask <複合クエリ>` | `$ask ...` | orchestrator | 複合意図を分解し、必要な subagent だけを呼び分ける |
 | `/view [project] [--restore]` | `$view ...` | （直接実行） | 見返すためのビュー（`view.html`）を作る。問いの整理を提案。過去の報告書から記録を復元 |
 
@@ -88,6 +88,7 @@ Claude Code では各コマンドが subagent に fork して動く。Codex で�
 🆕 [新規] Author 2025  ProteinX drives PathwayY dysregulation...  (cited 34)
    [既出] Author 2023  ProteinZ gain-of-function...               (cited 89)
 
+- 調査結果は会話と、対応する JSON 記録・ビューに集約し、`workspace/` に調査結果の Markdown を蓄積しない。Obsidian への保存は明示指示がある場合だけ行い、未接続時も workspace に代替出力しない。例外・保存先の詳細は `AGENTS.md`「調査結果の保存・出力先」を参照。
 今回12件（新規2/既出10）。この軸はほぼ掘り尽くし。
 未探索の隣接軸：PathwayA × CellTypeB / DrugClassC 側からの逆引き ...
 ```
@@ -113,7 +114,7 @@ Claude Code では各コマンドが subagent に fork して動く。Codex で�
 - タブは「問いと答え」「文献」「検索履歴」の 3 つ。一覧は 1 行（問いは 1 行の答え、文献は「何を示したか」）だけを出し、行をクリックするとその場で要点（問いはエビデンス表、文献は研究カード）が開く。右の詳細欄はさらに詳しい情報（答えの全文、抄録、到達経路、依頼文など）を、閉じた節にまとめる。
 - **研究カード**：抄録以上を読んで採用・保留した文献に、AI が「種類・何を示したか・注意」と少数の項目を書く。項目はテーマで変わり、`view-config.json` でひな形（臨床／基礎・機序／方法論・計算／モデル・シミュレーション）を選び、必要なら項目を足す。
 - 依頼文は Claude Code（`/`）と Codex（`$`）を切り替えられる。
-- 実行記録の無い過去の日も、`query-log.jsonl` と `seen.jsonl` から「実行記録の外にあるもの」として表示する。報告書（`*.md`）が残っていれば `/view <project> --restore` で記録を復元できる。
+- 実行記録の無い過去の日も、`query-log.jsonl` と `seen.jsonl` から「実行記録の外にあるもの」として表示する。既存の過去の報告書（`*.md`）が残っていれば `/view <project> --restore` で記録を復元できる（新規の調査 Markdown は作成しない）。
 - 問いが増えすぎたら `/view` が整理（保留・統合・中止）を提案し、人が承認する。消さずに状態を変えて隠す。
 
 ---
@@ -208,7 +209,7 @@ Zotero MCP（`zotero-mcp serve`）は `zotero` という名前で登録する。
 | **OpenAlex** | ② 俯瞰・著者ネットワーク | MCP ではなく公開 REST API を `curl` で直接呼ぶ |
 | **Scite** | ③ 引用文脈評価（supporting / contrasting / mentioning、撤回） | MCP（`scite`、契約済み・OAuth）。Zotero 同梱の Scite ツールが fallback |
 | **Zotero** | 文献蓄積・所持照合（`--exclude-zotero` の照合先） | MCP（`zotero`、ローカル） |
-| **Obsidian** | 二次情報の出力先 | 未接続（`workspace/<project>/digest-*.md` に代替出力） |
+| **Obsidian** | 明示指示がある場合の二次情報出力先 | MCP 未接続。利用可能な vault・出力経路を確認し、出力できない場合は会話で報告（workspace への代替保存なし） |
 
 - MCP のサーバー名を両ランタイムで揃えているので、ツール名（`mcp__pubmed__*` 等）が一致し、手順書を書き分けずに済む。
 - OpenAlex の Boolean 検索は PubMed ほど精密でないため、自然言語を丸ごと 1 クエリにせず concept / filter に分解して組む。

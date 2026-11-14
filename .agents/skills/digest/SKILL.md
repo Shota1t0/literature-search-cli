@@ -1,6 +1,6 @@
 ---
 name: digest
-description: "Summarize/fact-check target literature, output secondary material (local fallback while Obsidian is not connected). Zotero accumulation only runs if explicitly requested. (Codex counterpart of Claude Code's /digest)"
+description: "Summarize/fact-check target literature in conversation. Obsidian output and Zotero accumulation each require an explicit request. (Codex counterpart of Claude Code's /digest)"
 ---
 
 # `$digest` — Claude Code の `/digest` に対応する Codex アダプタ
